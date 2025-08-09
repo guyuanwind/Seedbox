@@ -33,6 +33,10 @@ if [ ! -d "$outdir" ]; then
   mkdir -p "$outdir"
 fi
 
+# 清空截图保存目录，确保只有新截取的图片
+echo "清空截图目录: $outdir"
+rm -rf "${outdir:?}"/*
+
 shift 2
 
 do_screenshot() {
