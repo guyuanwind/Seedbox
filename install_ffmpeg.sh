@@ -1,5 +1,4 @@
 #!/bin/bash
-
 set -e
 
 # 检测系统架构
@@ -17,25 +16,27 @@ FFMPEG_DIR="/usr/local/ffmpeg-master-latest"
 PROFILE_FILE="/etc/profile"
 ENV_LINE="export PATH=\$PATH:$FFMPEG_DIR/bin"
 
+# 下载
+FILE_NAME=$(basename "$FFMPEG_URL")
 echo "Detected architecture: $ARCH"
 echo "Downloading FFmpeg from: $FFMPEG_URL"
 curl -LO "$FFMPEG_URL"
 
+# 解压
 echo "Extracting FFmpeg..."
-tar -xf ffmpeg-master-latest-*.tar.xz
+tar -xf "$FILE_NAME"
 
 # 获取解压后的文件夹名
 EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "ffmpeg-master-latest-*" | head -n 1)
 
+# 安装
 echo "Copying FFmpeg to $FFMPEG_DIR ..."
-sudo rm -rf "$FFMPEG_DIR"   # 删除旧版本
+sudo rm -rf "$FFMPEG_DIR"
 sudo cp -r "$EXTRACTED_DIR" "$FFMPEG_DIR"
 
+# 配置环境变量
 echo "Configuring environment variable..."
-
-# 检查是否已存在该行
 if grep -Fxq "$ENV_LINE" "$PROFILE_FILE"; then
-  # 存在，检查是否在最后一行
   last_line=$(tail -n 1 "$PROFILE_FILE")
   if [ "$last_line" != "$ENV_LINE" ]; then
     sudo sed -i "\|$ENV_LINE|d" "$PROFILE_FILE"
