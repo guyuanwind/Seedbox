@@ -31,8 +31,8 @@ fi
 # 存储所有BBCode
 bbcode_all=""
 
-# 上传图片
-find "$DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \) | while IFS= read -r image; do
+# 遍历图片文件列表，避免管道子shell影响变量
+while IFS= read -r image; do
     echo "正在上传: $image"
 
     varCurl=$(curl -s "https://api.pixhost.to/images" \
@@ -44,14 +44,14 @@ find "$DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -i
     var2=$(echo "$varCurl" | jq -r '.th_url')
 
     if [ "$var2" != "null" ]; then
-        echo "上传成功: $image"
+        echo "上传成功..."
         bbcode="[img]$var2[/img]"
         bbcode_all="${bbcode_all}${bbcode}\n"
     else
         echo "上传失败: $image"
         echo "返回内容: $varCurl"
     fi
-done
+done < <(find "$DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \))
 
 # 统一输出所有BBCode
 echo -e "\n===== 所有图片 BBCode（无url标签） ====="
