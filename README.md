@@ -49,4 +49,9 @@ bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads
 ```
 curl -fsSL https://res.oplist.org/script/v4.sh > install-openlist-v4.sh && sudo bash install-openlist-v4.sh
 ```
+### 截图上传
+```
+bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/PixhostUpload.sh) /path/to/images
+
+```
 
