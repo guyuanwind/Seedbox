@@ -1,43 +1,45 @@
 #!/bin/bash
+# 批量上传指定文件夹所有图片到 Pixhost，并生成 BBCode
+# 用法: ./PixhostUpload.sh <图片文件夹路径>
 
-# 检查是否传入目录参数
+# ========= 自动安装依赖 =========
+check_and_install() {
+    local pkg=$1
+    if ! command -v "$pkg" &>/dev/null; then
+        echo "检测到 $pkg 未安装，正在安装..."
+        sudo apt update -y
+        sudo apt install -y "$pkg"
+    fi
+}
+
+check_and_install jq
+check_and_install curl
+
+# ========= 参数检查 =========
 if [ -z "$1" ]; then
     echo "用法: $0 <图片文件夹路径>"
     exit 1
 fi
 
-# 目标文件夹
 DIR="$1"
 
-# 检查目录是否存在
 if [ ! -d "$DIR" ]; then
     echo "错误: $DIR 不是一个有效的目录"
     exit 1
 fi
 
-# 检查依赖
-if ! command -v jq &>/dev/null; then
-    echo "错误: 需要安装 jq，请先执行: sudo apt install jq"
-    exit 1
-fi
-
-if ! command -v curl &>/dev/null; then
-    echo "错误: 需要安装 curl，请先执行: sudo apt install curl"
-    exit 1
-fi
-
-# 遍历目录中的所有图片文件
+# ========= 上传逻辑 =========
 find "$DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \) | while IFS= read -r image; do
     echo "正在上传: $image"
 
-    # 上传到 pixhost
+    # 上传到 pixhost API
     varCurl=$(curl -s "https://api.pixhost.to/images" \
       -H 'Accept: application/json' \
       -F "img=@${image}" \
       -F 'content_type=1' \
       -F 'max_th_size=500')
 
-    # 提取 URL
+    # 解析 JSON
     var1=$(echo "$varCurl" | jq -r '.show_url')
     var2=$(echo "$varCurl" | jq -r '.th_url')
 
