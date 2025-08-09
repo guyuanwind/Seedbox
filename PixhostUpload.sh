@@ -28,10 +28,6 @@ if [ ! -d "$DIR" ]; then
     exit 1
 fi
 
-# 上传前清空文件夹内容
-echo "清空文件夹内容：$DIR"
-rm -rf "$DIR"/*
-
 # 存储所有BBCode
 bbcode_all=""
 
