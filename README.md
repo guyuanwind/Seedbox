@@ -40,6 +40,9 @@ bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads
 ```
 bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/filebrowser.sh) /data/fb-save /data/fb-media
 ```
+第一个参数：fb配置文件保存目录
+
+第二个参数：fb访问文件根目录
 
 举例:
 ```
@@ -55,9 +58,16 @@ curl -fsSL https://res.oplist.org/script/v4.sh > install-openlist-v4.sh && sudo 
 bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots.sh) "/root/qb/downloads/Young.Sheldon.S04E01.mkv" "/root/qb/screenshots" 00:05:00 00:10:00 00:15:00
 
 ```
+
+第一个参数：视频文件完整路径
+
+第二个参数：截图保存位置
+
+后面的参数：截图时间点。几个参数截图几张
+
 ### 截图上传
 ```
 bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/PixhostUpload.sh) /path/to/images
 
 ```
-
+参数：截图保存目录
