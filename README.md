@@ -26,13 +26,24 @@ sudo apt update && sudo apt install -y unzip && bash <(curl -sL 'https://get.doc
 ```
 bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/install_ffmpeg.sh)
 ```
-### publisher安装
+### publish-helper安装
 ```
 bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/publish-helper.sh) 保存目录 媒体目录
 ```
+
+举例:
+```
+bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/publish-helper.sh) /root/publisher-help /root/qb
+```
+
 ### filebrowser安装
 ```
 bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/filebrowser.sh) /data/fb-save /data/fb-media
+```
+
+举例:
+```
+bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/filebrowser.sh) /root/fb /root/qb
 ```
 ### openlist安装
 ```
