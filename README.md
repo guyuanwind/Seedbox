@@ -49,6 +49,12 @@ bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads
 ```
 curl -fsSL https://res.oplist.org/script/v4.sh > install-openlist-v4.sh && sudo bash install-openlist-v4.sh
 ```
+
+### ffmpeg截图
+```
+bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots.sh) "/root/qb/downloads/Young.Sheldon.S04E01.mkv" "/root/qb/screenshots" 00:05:00 00:10:00 00:15:00
+
+```
 ### 截图上传
 ```
 bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/PixhostUpload.sh) /path/to/images
