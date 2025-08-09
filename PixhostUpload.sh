@@ -1,8 +1,8 @@
 #!/bin/bash
-# 批量上传指定文件夹所有图片到 Pixhost，并生成 BBCode
+# Pixhost 批量上传脚本（去url标签，统一输出BBCode）
 # 用法: ./PixhostUpload.sh <图片文件夹路径>
 
-# ========= 自动安装依赖 =========
+# 自动安装依赖
 check_and_install() {
     local pkg=$1
     if ! command -v "$pkg" &>/dev/null; then
@@ -15,7 +15,7 @@ check_and_install() {
 check_and_install jq
 check_and_install curl
 
-# ========= 参数检查 =========
+# 参数检查
 if [ -z "$1" ]; then
     echo "用法: $0 <图片文件夹路径>"
     exit 1
@@ -28,28 +28,31 @@ if [ ! -d "$DIR" ]; then
     exit 1
 fi
 
-# ========= 上传逻辑 =========
+# 存储所有BBCode
+bbcode_all=""
+
+# 上传图片
 find "$DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \) | while IFS= read -r image; do
     echo "正在上传: $image"
 
-    # 上传到 pixhost API
     varCurl=$(curl -s "https://api.pixhost.to/images" \
       -H 'Accept: application/json' \
       -F "img=@${image}" \
       -F 'content_type=1' \
       -F 'max_th_size=500')
 
-    # 解析 JSON
-    var1=$(echo "$varCurl" | jq -r '.show_url')
     var2=$(echo "$varCurl" | jq -r '.th_url')
 
-    # 输出 BBCode
-    if [ "$var1" != "null" ] && [ "$var2" != "null" ]; then
-        echo "[url=$var1][img]$var2[/img][/url]"
+    if [ "$var2" != "null" ]; then
+        echo "上传成功: $image"
+        bbcode="[img]$var2[/img]"
+        bbcode_all="${bbcode_all}${bbcode}\n"
     else
         echo "上传失败: $image"
         echo "返回内容: $varCurl"
     fi
-
-    echo "----------------------------------------"
 done
+
+# 统一输出所有BBCode
+echo -e "\n===== 所有图片 BBCode（无url标签） ====="
+echo -e "${bbcode_all}"
