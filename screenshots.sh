@@ -80,6 +80,7 @@ for timepoint in "$@"; do
   ret=$?
 
   if [ $ret -ne 0 ]; then
+    echo
     continue
   fi
 
@@ -95,4 +96,6 @@ for timepoint in "$@"; do
   else
     echo "${filename} 截图成功"
   fi
+
+  echo
 done
