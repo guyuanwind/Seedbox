@@ -33,7 +33,7 @@ if [ ! -d "$outdir" ]; then
   mkdir -p "$outdir"
 fi
 
-# 清空截图保存目录，确保只有新截取的图片
+# 清空截图保存目录
 echo "清空截图目录: $outdir"
 rm -rf "${outdir:?}"/*
 
@@ -42,15 +42,31 @@ shift 2
 do_screenshot() {
   local timepoint=$1
   local filepath=$2
-  ffmpeg -ss "$timepoint" -i "$video" -map 0:v:0 -y -frames:v 1 -update 1 "$filepath" >/dev/null 2>&1
-  return $?
+  local ffmpeg_err
+  ffmpeg_err=$(ffmpeg -ss "$timepoint" -i "$video" -map 0:v:0 -y -frames:v 1 -update 1 "$filepath" 2>&1 >/dev/null)
+  local ret=$?
+  if [ $ret -ne 0 ]; then
+    echo "截图失败：$filepath"
+    echo "原因："
+    echo "$ffmpeg_err"
+  fi
+  return $ret
 }
 
 do_screenshot_reencode() {
   local timepoint=$1
   local filepath=$2
-  ffmpeg -ss "$timepoint" -i "$video" -map 0:v:0 -frames:v 1 -y -vf "format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24" -c:v png -compression_level 9 -pred mixed "$filepath" >/dev/null 2>&1
-  return $?
+  local ffmpeg_err
+  ffmpeg_err=$(ffmpeg -ss "$timepoint" -i "$video" -map 0:v:0 -frames:v 1 -y \
+    -vf "format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24" \
+    -c:v png -compression_level 9 -pred mixed "$filepath" 2>&1 >/dev/null)
+  local ret=$?
+  if [ $ret -ne 0 ]; then
+    echo "重新压缩截图失败：$filepath"
+    echo "原因："
+    echo "$ffmpeg_err"
+  fi
+  return $ret
 }
 
 for timepoint in "$@"; do
@@ -64,7 +80,6 @@ for timepoint in "$@"; do
   ret=$?
 
   if [ $ret -ne 0 ]; then
-    echo "${filename}截图失败"
     continue
   fi
 
@@ -74,13 +89,10 @@ for timepoint in "$@"; do
   if (( $(echo "$size_mb > 10" | bc -l) )); then
     echo "${filename} 大小为 ${size_mb}MB，超过10M，正在重新压缩截图..."
     do_screenshot_reencode "$timepoint" "$filepath"
-    ret=$?
-    if [ $ret -eq 0 ]; then
-      echo "${filename}重新压缩截图成功"
-    else
-      echo "${filename}重新压缩截图失败"
+    if [ $? -eq 0 ]; then
+      echo "${filename} 重新压缩截图成功"
     fi
   else
-    echo "${filename}截图成功"
+    echo "${filename} 截图成功"
   fi
 done
