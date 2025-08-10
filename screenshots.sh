@@ -1,5 +1,5 @@
 #!/bin/bash
-# 视频批量截图脚本，截图后检查大小超10M自动重拍
+# 视频批量截图脚本，截图后检查大小超10M自动重拍（去除压缩截图色彩空间转换）
 # 用法: ./screenshots.sh <视频文件路径> <截图保存目录> <时间点1> [时间点2] [...]
 
 check_and_install_bc() {
@@ -59,7 +59,6 @@ do_screenshot_reencode() {
   local filepath=$2
   local ffmpeg_err
   ffmpeg_err=$(ffmpeg -ss "$timepoint" -i "$video" -map 0:v:0 -frames:v 1 -y \
-    -vf "zscale=t=linear:npl=100,tonemap=hable:desat=0:peak=1,format=yuv420p" \
     -c:v png -compression_level 9 -pred mixed "$filepath" 2>&1 >/dev/null)
   local ret=$?
   if [ $ret -ne 0 ]; then
