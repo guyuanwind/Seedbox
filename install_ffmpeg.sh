@@ -11,15 +11,12 @@ check_root() {
 
 remove_old_ffmpeg() {
     echo "检查并清理旧版本 FFmpeg..."
-    # 删除 apt/yum 安装的 ffmpeg
     if command -v ffmpeg >/dev/null 2>&1; then
         OLD_PATH=$(command -v ffmpeg)
         echo "发现已安装 FFmpeg: $OLD_PATH"
         apt-get remove -y ffmpeg 2>/dev/null || yum remove -y ffmpeg 2>/dev/null || true
     fi
-    # 删除本地安装的 ffmpeg 目录
     rm -rf /usr/local/ffmpeg-master-latest-* 2>/dev/null || true
-    # 删除 /etc/profile 中旧的 FFmpeg PATH
     sed -i '/# Added by FFmpeg install script/d' /etc/profile
     sed -i '/ffmpeg-master-latest-/d' /etc/profile
 }
@@ -65,11 +62,16 @@ extract_and_install() {
     echo "安装 FFmpeg 到 $FFMPEG_DIR ..."
     mv "$EXTRACTED_DIR" "$FFMPEG_DIR"
 
+    # 写入环境变量
     ENV_LINE="export PATH=\$PATH:$FFMPEG_DIR/bin"
     {
         echo "# Added by FFmpeg install script"
         echo "$ENV_LINE"
     } >> /etc/profile
+
+    # 创建软链接（即使没刷新环境变量也能用）
+    ln -sf "$FFMPEG_DIR/bin/ffmpeg" /usr/local/bin/ffmpeg
+    ln -sf "$FFMPEG_DIR/bin/ffprobe" /usr/local/bin/ffprobe
 
     echo "已将 FFmpeg 路径写入 /etc/profile"
 }
@@ -90,4 +92,8 @@ download_ffmpeg
 extract_and_install
 verify_install
 
+echo "======================================="
 echo "安装完成！"
+echo "立即运行以下命令刷新环境变量："
+echo "source /etc/profile && hash -r"
+echo "======================================="
