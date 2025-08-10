@@ -18,9 +18,9 @@ bash <(wget -qO- https://raw.githubusercontent.com/iniwex5/tools/refs/heads/main
 
 项目地址：https://github.com/iniwex5/tools
 
-### docker安装
+### unzip mediainfo docker安装
 ```
-sudo apt update && sudo apt install -y unzip && bash <(curl -sL 'https://get.docker.com')
+sudo apt update && sudo apt install -y unzip && sudo apt install -y mediainfo && bash <(curl -sL 'https://get.docker.com')
 ```
 ### ffmpeg安装
 ```
