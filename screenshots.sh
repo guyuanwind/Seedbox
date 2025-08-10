@@ -36,6 +36,7 @@ fi
 # 清空截图保存目录
 echo "清空截图目录: $outdir"
 rm -rf "${outdir:?}"/*
+echo
 
 shift 2
 
@@ -58,7 +59,7 @@ do_screenshot_reencode() {
   local filepath=$2
   local ffmpeg_err
   ffmpeg_err=$(ffmpeg -ss "$timepoint" -i "$video" -map 0:v:0 -frames:v 1 -y \
-    -vf "format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24" \
+    -vf "zscale=t=linear:npl=100,tonemap=hable:desat=0:peak=1,format=yuv420p" \
     -c:v png -compression_level 9 -pred mixed "$filepath" 2>&1 >/dev/null)
   local ret=$?
   if [ $ret -ne 0 ]; then
