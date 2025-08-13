@@ -8,7 +8,12 @@ fail_count=0
 failed_files=()
 failed_reasons=()
 
-# 依赖检测与安装
+# 时间格式正则
+time_regex='^([0-9]{1,2}:)?[0-9]{1,2}:[0-9]{2}$'
+
+# ------------------------
+# 依赖检测
+# ------------------------
 check_and_install_bc() {
     if ! command -v bc &>/dev/null; then
         echo "[依赖检测] 缺少 bc，正在安装..."
@@ -34,8 +39,11 @@ check_and_install_ffmpeg() {
     fi
 }
 
-# 参数格式检查
+# ------------------------
+# 参数严格校验
+# ------------------------
 validate_arguments() {
+    # 检查参数个数
     if [ "$#" -lt 3 ]; then
         echo "[错误] 参数不足"
         echo "用法: $0 <视频文件路径> <截图保存目录> <时间点1> [时间点2] [...]"
@@ -46,29 +54,49 @@ validate_arguments() {
     outdir="$2"
     third_arg="$3"
 
+    # 第一个参数必须是存在的文件
     if [ ! -f "$video" ]; then
         echo "[错误] 视频文件不存在或无法读取：$video"
         exit 1
     fi
 
+    # 第二个参数不能是时间点格式
+    if [[ "$outdir" =~ $time_regex ]]; then
+        echo "[错误] 第二个参数疑似时间点（$outdir），请提供截图保存目录路径"
+        exit 1
+    fi
+
+    # 如果目录存在但不是文件夹，报错
     if [ -e "$outdir" ] && [ ! -d "$outdir" ]; then
         echo "[错误] 第二个参数已存在但不是目录：$outdir"
         exit 1
     fi
 
+    # 如果目录不存在则创建
     if [ ! -d "$outdir" ]; then
         echo "[提示] 截图保存目录不存在，正在创建：$outdir"
         mkdir -p "$outdir" || { echo "[错误] 创建目录失败"; exit 1; }
     fi
 
-    time_regex='^([0-9]{1,2}:)?[0-9]{1,2}:[0-9]{2}$'
-    if ! [[ $third_arg =~ $time_regex ]]; then
+    # 第三个参数必须是时间格式
+    if ! [[ "$third_arg" =~ $time_regex ]]; then
         echo "[错误] 第三个参数 \"$third_arg\" 格式不正确，应为 HH:MM:SS 或 MM:SS"
         exit 1
     fi
+
+    # 检查所有时间点格式
+    shift 2
+    for tp in "$@"; do
+        if ! [[ "$tp" =~ $time_regex ]]; then
+            echo "[错误] 时间点 \"$tp\" 格式不正确，应为 HH:MM:SS 或 MM:SS"
+            exit 1
+        fi
+    done
 }
 
-# 检查依赖
+# ------------------------
+# 依赖检查
+# ------------------------
 check_and_install_bc
 check_and_install_ffmpeg
 
@@ -77,21 +105,14 @@ if [ $FIRST_RUN -eq 1 ]; then
     echo
 fi
 
+# ------------------------
 # 参数验证
+# ------------------------
 validate_arguments "$@"
 
 video="$1"
 outdir="$2"
 shift 2
-
-# 检查所有时间参数格式
-time_regex='^([0-9]{1,2}:)?[0-9]{1,2}:[0-9]{2}$'
-for tp in "$@"; do
-    if ! [[ $tp =~ $time_regex ]]; then
-        echo "[错误] 时间点 \"$tp\" 格式不正确，应为 HH:MM:SS 或 MM:SS"
-        exit 1
-    fi
-done
 
 # 清空截图保存目录
 echo "[信息] 清空截图目录: $outdir"
