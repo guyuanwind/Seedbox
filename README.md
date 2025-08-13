@@ -3,15 +3,16 @@
 wget --no-check-certificate -qO InstallNET.sh 'https://raw.githubusercontent.com/leitbogioro/Tools/master/Linux_reinstall/InstallNET.sh' && chmod a+x InstallNET.sh && bash InstallNET.sh -debian 12 -pwd 'password'
 ```
 
-### qb部署脚本
-**杰大**
+### 杰大vt+qb部署脚本
+
 ```
 bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) -u <用戶名稱> -p <密碼> -c <緩存大小(單位:MiB)> -q <qBittorrent 版本> -l <libtorrent 版本> -b -v -r -3 -x -o
 ```
 
 项目地址：https://github.com/jerry048/Dedicated-Seedbox/blob/main/README-zh.md
 
-**胡师傅**
+### 胡师傅 4.3.8qb
+
 ```
 bash <(wget -qO- https://raw.githubusercontent.com/iniwex5/tools/refs/heads/main/NC_QB438.sh) username password webuiport btport
 ```
