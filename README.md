@@ -72,3 +72,11 @@ bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/m
 
 ```
 参数：截图保存目录
+
+### 一键截图上传
+```
+bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/AutoScreenshot.sh) "/root/qb/downloads/Young.Sheldon.S04E01.mkv" "/root/qb/screenshots" 00:05:00 00:10:00 00:15:00
+
+```
+
+
