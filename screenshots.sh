@@ -171,7 +171,7 @@ for timepoint in "$@"; do
   size_mb=$(echo "scale=2; $size_bytes/1024/1024" | bc)
 
   if (( $(echo "$size_mb > 10" | bc -l) )); then
-    echo "[提示] $filename 大小 ${size_mb}MB，超过10M，重新压缩..."
+    echo "[提示] $filename 大小 ${size_mb}MB，超过10M，重新压缩截图..."
     do_screenshot_reencode "$timepoint" "$filepath"
     if [ $? -eq 0 ]; then
       ((success_count++))
