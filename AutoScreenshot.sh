@@ -1,204 +1,66 @@
 #!/bin/bash
-# 视频批量截图并上传到 PixHost
-# 用法: ./screenshots.sh <视频文件路径> <截图保存目录> <时间点1> [时间点2] [...]
+# AutoScreenshot.sh
+# 极简编排：调用 screenshots.sh 完成截图 → 调用 PixhostUpload.sh 批量上传
+# 用法:
+#   ./AutoScreenshot.sh <视频/ISO/目录> <输出目录> [HH:MM:SS|MM:SS]...
+# 说明:
+#   - 详细日志由 screenshots.sh 与 PixhostUpload.sh 各自负责
+#   - 本脚本仅打印阶段标题与简短汇总（走 stderr）
+#   - PixhostUpload.sh 的 stdout 为纯净 BBCode 直链，便于复制
 
-FIRST_RUN=0
-success_count=0
-fail_count=0
-failed_files=()
-failed_reasons=()
+set -euo pipefail
 
-# 时间格式正则
-time_regex='^([0-9]{1,2}:)?[0-9]{1,2}:[0-9]{2}$'
+# 颜色
+C_RESET='\033[0m'
+C_BANNER='\033[1;36m'   # 青色
+C_INFO='\033[1;32m'     # 绿色
+C_ERR='\033[1;31m'      # 红色
 
-# ------------------------
-# 依赖检测
-# ------------------------
-check_and_install_bc() {
-    if ! command -v bc &>/dev/null; then
-        echo "[依赖检测] 缺少 bc，正在安装..."
-        sudo apt update -y
-        sudo apt install -y bc
-        if ! command -v bc &>/dev/null; then
-            echo "[错误] 安装 bc 失败，请手动安装后重试。"
-            exit 1
-        fi
-        FIRST_RUN=1
-    fi
-}
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+SS="$SELF_DIR/screenshots.sh"
+UP="$SELF_DIR/PixhostUpload.sh"
 
-check_and_install_ffmpeg() {
-    if ! command -v ffmpeg &>/dev/null; then
-        echo "[依赖检测] 缺少 ffmpeg，正在安装..."
-        bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/install_ffmpeg.sh)
-        if ! command -v ffmpeg &>/dev/null; then
-            echo "[错误] 安装 ffmpeg 失败，请手动安装后重试。"
-            exit 1
-        fi
-        FIRST_RUN=1
-    fi
-}
+banner(){ echo -e "\n${C_BANNER}========== $* ==========${C_RESET}\n" >&2; }
+info(){ echo -e "${C_INFO}$*${C_RESET}" >&2; }
+err(){ echo -e "${C_ERR}$*${C_RESET}" >&2; }
 
-# ------------------------
-# 参数严格校验
-# ------------------------
-validate_arguments() {
-    if [ "$#" -lt 3 ]; then
-        echo "[错误] 参数不足"
-        echo "用法: $0 <视频文件路径> <截图保存目录> <时间点1> [时间点2] [...]"
-        exit 1
-    fi
-
-    video="$1"
-    outdir="$2"
-    third_arg="$3"
-
-    if [ ! -f "$video" ]; then
-        echo "[错误] 视频文件不存在或无法读取：$video"
-        exit 1
-    fi
-
-    if [[ "$outdir" =~ $time_regex ]]; then
-        echo "[错误] 第二个参数疑似时间点（$outdir），请提供截图保存目录路径"
-        exit 1
-    fi
-
-    if [ -e "$outdir" ] && [ ! -d "$outdir" ]; then
-        echo "[错误] 第二个参数已存在但不是目录：$outdir"
-        exit 1
-    fi
-
-    if [ ! -d "$outdir" ]; then
-        echo "[提示] 截图保存目录不存在，正在创建：$outdir"
-        mkdir -p "$outdir" || { echo "[错误] 创建目录失败"; exit 1; }
-    fi
-
-    if ! [[ "$third_arg" =~ $time_regex ]]; then
-        echo "[错误] 第三个参数 \"$third_arg\" 格式不正确，应为 HH:MM:SS 或 MM:SS"
-        exit 1
-    fi
-
-    shift 2
-    for tp in "$@"; do
-        if ! [[ "$tp" =~ $time_regex ]]; then
-            echo "[错误] 时间点 \"$tp\" 格式不正确，应为 HH:MM:SS 或 MM:SS"
-            exit 1
-        fi
-    done
-}
-
-# ------------------------
-# 依赖检查
-# ------------------------
-check_and_install_bc
-check_and_install_ffmpeg
-
-if [ $FIRST_RUN -eq 1 ]; then
-    echo "[提示] 首次运行依赖安装完成，可以正常使用该脚本。"
-    echo
+if [ "$#" -lt 2 ]; then
+  err "用法: $0 <视频/ISO/目录> <输出目录> [时间点...]"
+  exit 1
 fi
 
-# ------------------------
-# 参数验证
-# ------------------------
-validate_arguments "$@"
+INPUT="$1"; OUTDIR="$2"; shift 2
 
-video="$1"
-outdir="$2"
-shift 2
+[ -f "$SS" ] || { err "[错误] 未找到脚本：$SS"; exit 1; }
+[ -f "$UP" ] || { err "[错误] 未找到脚本：$UP"; exit 1; }
 
-# 清空截图保存目录
-echo "[信息] 清空截图目录: $outdir"
-rm -rf "${outdir:?}"/*
+# 修正可能的 CRLF（避免 $'\r' 报错）
+sed -i 's/\r$//' "$SS" "$UP" 2>/dev/null || true
 
-start_time=$(date +%s)
+# Step 1 截图
+banner "Step 1/2 截图"
+bash "$SS" "$INPUT" "$OUTDIR" "$@"
 
-# 截图函数
-do_screenshot() {
-  local timepoint=$1
-  local filepath=$2
-  local ffmpeg_err
-  ffmpeg_err=$(ffmpeg -ss "$timepoint" -i "$video" -map 0:v:0 -y -frames:v 1 -update 1 "$filepath" 2>&1 >/dev/null)
-  local ret=$?
-  if [ $ret -ne 0 ]; then
-    failed_files+=("$(basename "$filepath")")
-    failed_reasons+=("$ffmpeg_err")
-  fi
-  return $ret
-}
+# 检查产物
+mapfile -t IMGS < <(find "$OUTDIR" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) | sort)
+COUNT=${#IMGS[@]}
+if [ "$COUNT" -eq 0 ]; then
+  err "[错误] 截图目录无图片：$OUTDIR"
+  err "（已停止：不执行上传）"
+  exit 1
+fi
+info "[信息] 截图完成，发现 $COUNT 张图片。"
 
-# 重新压缩函数
-do_screenshot_reencode() {
-  local timepoint=$1
-  local filepath=$2
-  local ffmpeg_err
-  ffmpeg_err=$(ffmpeg -ss "$timepoint" -i "$video" -map 0:v:0 -frames:v 1 -y \
-    -vf "format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24" \
-    -c:v png -compression_level 9 -pred mixed "$filepath" 2>&1 >/dev/null)
-  local ret=$?
-  if [ $ret -ne 0 ]; then
-    failed_files+=("$(basename "$filepath")")
-    failed_reasons+=("$ffmpeg_err")
-  fi
-  return $ret
-}
-
-# 截图循环
-for timepoint in "$@"; do
-  minpart=$(echo "$timepoint" | cut -d':' -f2)
-  filename="${minpart}min.png"
-  filepath="$outdir/$filename"
-
-  echo "[信息] 截图: $timepoint -> $filename"
-
-  do_screenshot "$timepoint" "$filepath"
-  ret=$?
-
-  if [ $ret -ne 0 ]; then
-    ((fail_count++))
-    continue
-  fi
-
-  size_bytes=$(stat -c%s "$filepath")
-  size_mb=$(echo "scale=2; $size_bytes/1024/1024" | bc)
-
-  if (( $(echo "$size_mb > 10" | bc -l) )); then
-    echo "[提示] $filename 大小 ${size_mb}MB，超过10M，重新压缩..."
-    do_screenshot_reencode "$timepoint" "$filepath"
-    if [ $? -eq 0 ]; then
-      ((success_count++))
-    else
-      ((fail_count++))
-    fi
-  else
-    ((success_count++))
-  fi
-done
-
-# 输出截图结果
-end_time=$(date +%s)
-elapsed=$((end_time - start_time))
-minutes=$((elapsed / 60))
-seconds=$((elapsed % 60))
+# Step 2 上传（stderr 加前缀，stdout 纯 BBCode）
+banner "Step 2/2 上传到 PixHost"
+BBCODE="$(bash "$UP" "$OUTDIR" 2> >(sed -u 's/^/[上传] /' >&2))" || true
 
 echo
-echo "===== 截图任务完成 ====="
-echo "成功: ${success_count} 张 | 失败: ${fail_count} 张"
-echo "总耗时: ${minutes}分${seconds}秒"
-
-if [ $fail_count -gt 0 ]; then
-    echo
-    echo "===== 截图失败详情 ====="
-    for i in "${!failed_files[@]}"; do
-        echo "[失败] 文件: ${failed_files[$i]}"
-        echo "原因: ${failed_reasons[$i]}"
-        echo
-    done
+if [ -n "$BBCODE" ]; then
+  info "[信息] BBCode 原图直链如下："
+  echo "$BBCODE"
+else
+  err "[警告] 未获取到任何 BBCode 直链，请查看上方 [上传] 日志。"
 fi
 
-# ------------------------
-# 上传到 PixHost
-# ------------------------
-echo
-echo "[信息] 开始上传截图到 PixHost..."
-bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/PixhostUpload.sh) "$outdir"
+banner "全部完成"
