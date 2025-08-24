@@ -3,10 +3,6 @@
 # 执行截图和上传功能脚本，下载并执行 screenshots.sh 和 PixhostUpload.sh
 # 用法:
 #   ./AutoScreenshot.sh <视频/ISO/目录> <输出目录> [HH:MM:SS|MM:SS]...
-# 说明:
-#   - 详细日志由 screenshots.sh 与 PixhostUpload.sh 各自负责
-#   - 本脚本仅打印阶段标题与简短汇总（走 stderr）
-#   - PixhostUpload.sh 的 stdout 为纯净 BBCode 直链，便于复制
 
 set -euo pipefail
 
@@ -48,14 +44,7 @@ fi
 
 INPUT="$1"; OUTDIR="$2"; shift 2
 
-# 检查文件是否存在
-[ -f "$SS" ] || { err "[错误] 未找到脚本：$SS"; exit 1; }
-[ -f "$UP" ] || { err "[错误] 未找到脚本：$UP"; exit 1; }
-
-# 修正可能的 CRLF（避免 $'\r' 报错）
-sed -i 's/\r$//' "$SS" "$UP" 2>/dev/null || true
-
-# Step 1: 下载并执行 screenshots.sh
+# 下载并执行 screenshots.sh 脚本
 banner "Step 1/2 截图"
 download_and_execute "https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots.sh" "screenshots.sh" "$@"
 
@@ -69,7 +58,7 @@ if [ "$COUNT" -eq 0 ]; then
 fi
 info "[信息] 截图完成，发现 $COUNT 张图片。"
 
-# Step 2: 下载并执行 PixhostUpload.sh
+# 下载并执行 PixhostUpload.sh 脚本
 banner "Step 2/2 上传到 PixHost"
 download_and_execute "https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/PixhostUpload.sh" "PixhostUpload.sh" "$OUTDIR"
 
