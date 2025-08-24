@@ -2,7 +2,7 @@
 # AutoScreenshot.sh
 # 极简编排：调用 screenshots.sh 完成截图 → 调用 PixhostUpload.sh 批量上传
 # 用法:
-#   ./AutoScreenshot.sh <视频/ISO/目录> <输出目录> [HH:MM:SS|MM:SS]...
+#   ./AutoScreenshot.sh <视频/ISO/目录> <输出目录> [时间点...] 
 # 说明:
 #   - 详细日志由 screenshots.sh 与 PixhostUpload.sh 各自负责
 #   - 本脚本仅打印阶段标题与简短汇总（走 stderr）
