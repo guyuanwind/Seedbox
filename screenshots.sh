@@ -110,21 +110,48 @@ check_and_install_jq(){
   fi
 }
 
-# —— 参数验证
 validate_arguments(){
+  # 检查是否提供了第一个和第二个参数
   if [ "$#" -lt 2 ]; then
-    echo "用法: $0 <视频/ISO/目录> <输出目录> [时间点...]" ; exit 1
+    echo "[错误] 参数缺失：必须提供视频文件/ISO/目录和截图输出目录。"
+    echo "正确用法: $0 <视频/ISO/目录> <输出目录> [时间点...]"
+    exit 1
   fi
+
+  # 获取第一个参数和输出目录
   local p="$1" outdir="$2"
+  
+  # 检查输入的路径是否有效
   if [ ! -f "$p" ] && [ ! -d "$p" ]; then
-    echo "[错误] 路径不存在或无法读取：$p" ; exit 1
+    echo "[错误] 视频文件或目录不存在：$p"
+    echo "正确用法: $0 <视频/ISO/目录> <输出目录> [时间点...]"
+    exit 1
   fi
-  [[ "$outdir" =~ $time_regex ]] && { echo "[错误] 第二个参数疑似时间点：$outdir"; exit 1; }
-  [ -e "$outdir" ] && [ ! -d "$outdir" ] && { echo "[错误] 目标已存在但不是目录：$outdir"; exit 1; }
-  [ -d "$outdir" ] || { log "[提示] 创建截图目录：$outdir"; mkdir -p "$outdir" || { echo "[错误] 创建目录失败"; exit 1; }; }
+
+  # 确认第二个参数（输出目录）存在且是一个有效的目录
+  if [ -z "$outdir" ]; then
+    echo "[错误] 参数缺失：必须提供截图输出目录。"
+    echo "正确用法: $0 <视频/ISO/目录> <输出目录> [时间点...]"
+    exit 1
+  fi
+
+  if [ ! -d "$outdir" ]; then
+    echo "[错误] 输出目录无效：$outdir"
+    echo "正确用法: $0 <视频/ISO/目录> <输出目录> [时间点...]"
+    exit 1
+  fi
+
   shift 2
-  for t in "$@"; do [[ "$t" =~ $time_regex ]] || { echo "[错误] 时间点格式不正确：$t"; exit 1; }; done
+  # 检查时间点格式
+  for t in "$@"; do
+    if [[ ! "$t" =~ ^([0-9]{1,2}:)?[0-9]{1,2}:[0-9]{2}$ ]]; then
+      echo "[错误] 时间点格式不正确：$t"
+      echo "正确格式: 00:30:00 或 30:00"
+      exit 1
+    fi
+  done
 }
+
 
 # —— ISO & m2ts
 mount_iso(){
