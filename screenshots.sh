@@ -11,17 +11,7 @@
 #   ./screenshots.sh <视频/ISO/目录> <输出目录> [HH:MM:SS|MM:SS] [...]
 
 set -u
-
-# 颜色与标签（日志走 stderr）
-C_RESET='\033[0m'
-C_INFO='\033[1;32m'    # 绿色
-C_WARN='\033[1;33m'    # 黄色
-C_ERR='\033[1;31m'     # 红色
-C_HEAD='\033[1;36m'    # 青色
-info()   { echo -e "${C_INFO}[信息] $*${C_RESET}" >&2; }
-warn()   { echo -e "${C_WARN}[提示] $*${C_RESET}" >&2; }
-error()  { echo -e "${C_ERR}[错误] $*${C_RESET}" >&2; }
-stage()  { echo -e "\n${C_HEAD}========== $* ==========${C_RESET}\n" >&2; }
+log(){ echo -e "$*" >&2; }
 
 FIRST_RUN=0
 success_count=0
@@ -34,13 +24,13 @@ time_regex='^([0-9]{1,2}:)?[0-9]{1,2}:[0-9]{2}$'
 # —— 探测与对齐参数
 PROBESIZE="150M"
 ANALYZE="150M"
-COARSE_BACK_TEXT=3
-COARSE_BACK_PGS=12
+COARSE_BACK_TEXT=3           # 文本字幕预滚动
+COARSE_BACK_PGS=12           # PGS 预滚动
 SEARCH_BACK=6
 SEARCH_FWD=10
-SUB_SNAP_EPS=0.50
+SUB_SNAP_EPS=0.50            # 边缘缓冲
 DEFAULT_SUB_DUR=4.00
-PGS_MIN_PKT=1500
+PGS_MIN_PKT=1500             # 视为有效 PGS 包的最小 size
 AUTO_PERC=("0.20" "0.40" "0.60" "0.80")
 
 MOUNTED=0
@@ -83,12 +73,12 @@ clamp_0_dur(){ awk -v t="$1" -v mx="$DURATION" 'BEGIN{if(t<0)t=0; if(t>mx)t=mx; 
 
 cleanup(){
   if [ "$MOUNTED" -eq 1 ] && [ -n "$MOUNT_DIR" ]; then
-    info "正在卸载 ISO：$MOUNT_DIR"
+    log "[清理] 正在卸载 ISO：$MOUNT_DIR"
     if sudo umount "$MOUNT_DIR" 2>/tmp/umount_err.log; then
-      info "卸载成功，删除临时目录"
-      rmdir "$MOUNT_DIR" 2>/dev/null && info "已删除临时目录 $MOUNT_DIR"
+      log "[清理] 卸载成功，删除临时目录"
+      rmdir "$MOUNT_DIR" 2>/dev/null && log "[清理] 已删除临时目录 $MOUNT_DIR"
     else
-      warn "卸载失败："; cat /tmp/umount_err.log >&2
+      log "[警告] 卸载失败："; cat /tmp/umount_err.log >&2
     fi
     rm -f /tmp/umount_err.log
   fi
@@ -99,28 +89,28 @@ trap 'cleanup' EXIT INT TERM
 # —— 依赖
 check_and_install_bc(){
   if ! command -v bc >/dev/null 2>&1; then
-    warn "缺少 bc，正在安装..."
-    sudo apt update -y && sudo apt install -y bc || { error "安装 bc 失败"; exit 1; }
+    log "[依赖检测] 缺少 bc，正在安装..."
+    sudo apt update -y && sudo apt install -y bc || { log "[错误] 安装 bc 失败"; exit 1; }
     FIRST_RUN=1
   fi
 }
 check_and_install_ffmpeg(){
   if ! command -v ffmpeg >/dev/null 2>&1; then
-    warn "缺少 ffmpeg，正在安装..."
+    log "[依赖检测] 缺少 ffmpeg，正在安装..."
     bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/install_ffmpeg.sh) || true
-    command -v ffmpeg >/dev/null 2>&1 || { error "安装 ffmpeg 失败"; exit 1; }
+    command -v ffmpeg >/dev/null 2>&1 || { log "[错误] 安装 ffmpeg 失败"; exit 1; }
     FIRST_RUN=1
   fi
 }
 check_and_install_jq(){
   if ! command -v jq >/dev/null 2>&1; then
-    warn "缺少 jq，正在安装..."
-    sudo apt update -y && sudo apt install -y jq || { error "安装 jq 失败"; exit 1; }
+    log "[依赖检测] 缺少 jq，正在安装..."
+    sudo apt update -y && sudo apt install -y jq || { log "[错误] 安装 jq 失败"; exit 1; }
     FIRST_RUN=1
   fi
 }
 
-# —— 参数
+# —— 参数验证
 validate_arguments(){
   if [ "$#" -lt 2 ]; then
     echo "用法: $0 <视频/ISO/目录> <输出目录> [时间点...]" ; exit 1
@@ -131,7 +121,7 @@ validate_arguments(){
   fi
   [[ "$outdir" =~ $time_regex ]] && { echo "[错误] 第二个参数疑似时间点：$outdir"; exit 1; }
   [ -e "$outdir" ] && [ ! -d "$outdir" ] && { echo "[错误] 目标已存在但不是目录：$outdir"; exit 1; }
-  [ -d "$outdir" ] || { info "创建截图目录：$outdir"; mkdir -p "$outdir" || { echo "[错误] 创建目录失败"; exit 1; }; }
+  [ -d "$outdir" ] || { log "[提示] 创建截图目录：$outdir"; mkdir -p "$outdir" || { echo "[错误] 创建目录失败"; exit 1; }; }
   shift 2
   for t in "$@"; do [[ "$t" =~ $time_regex ]] || { echo "[错误] 时间点格式不正确：$t"; exit 1; }; done
 }
@@ -144,12 +134,12 @@ mount_iso(){
   iso_base="$(basename "$ISO_PATH" .iso)"
   ts="$(date +%s)"
   MOUNT_DIR="${iso_dir}/.${iso_base}_mnt_${ts}_$$"
-  mkdir -p "$MOUNT_DIR" || { error "创建挂载目录失败：$MOUNT_DIR"; exit 1; }
+  mkdir -p "$MOUNT_DIR" || { log "[错误] 创建挂载目录失败：$MOUNT_DIR"; exit 1; }
 
-  info "识别到 ISO 文件：$ISO_PATH"
-  info "挂载 ISO -> $MOUNT_DIR"
+  log "[提示] 识别到 ISO 文件：$ISO_PATH"
+  log "[信息] 挂载 ISO -> $MOUNT_DIR"
   if ! sudo mount -o loop "$ISO_PATH" "$MOUNT_DIR" 2>/tmp/mount_err.log; then
-    error "挂载 ISO 失败："; cat /tmp/mount_err.log >&2
+    log "[错误] 挂载 ISO 失败："; cat /tmp/mount_err.log >&2
     rm -f /tmp/mount_err.log; rmdir "$MOUNT_DIR" 2>/dev/null; exit 1
   fi
   rm -f /tmp/mount_err.log
@@ -158,49 +148,49 @@ mount_iso(){
 find_largest_m2ts_in_dir(){
   local root="$1" search_root="$1"
   [ -d "$root/BDMV/STREAM" ] && search_root="$root/BDMV/STREAM"
-  info "在目录中搜索最大 .m2ts：$search_root"
+  log "[信息] 在目录中搜索最大 .m2ts：$search_root"
   local biggest
   biggest=$(find "$search_root" -type f -iname '*.m2ts' -printf '%s %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
-  [ -z "$biggest" ] && { error "目录中未找到 .m2ts 文件"; return 1; }
-  info "选定最大 m2ts：$biggest"
+  [ -z "$biggest" ] && { log "[错误] 目录中未找到 .m2ts 文件"; return 1; }
+  log "[信息] 选定最大 m2ts：$biggest"
   M2TS_INPUT="$biggest"; return 0
 }
 find_largest_m2ts(){
   local base_dir="$1" search_root
   if [ -d "$base_dir/BDMV/STREAM" ]; then search_root="$base_dir/BDMV/STREAM"
-  else search_root="$base_dir"; warn "未找到 BDMV/STREAM，回退全盘搜索"; fi
-  info "正在搜索最大 m2ts 文件于：$search_root"
+  else search_root="$base_dir"; log "[提示] 未找到 BDMV/STREAM，回退全盘搜索"; fi
+  log "[信息] 正在搜索最大 m2ts 文件于：$search_root"
   local max_size=0 max_file="" sz
   while IFS= read -r -d '' f; do
     sz=$(stat -c%s "$f" 2>/dev/null || echo 0)
     [[ "$sz" =~ ^[0-9]+$ ]] || continue
     if [ "$sz" -gt "$max_size" ]; then max_size="$sz"; max_file="$f"; fi
   done < <(find "$search_root" -type f -iname '*.m2ts' -print0)
-  [ -z "$max_file" ] && { error "未找到 .m2ts"; return 1; }
-  info "选定最大 m2ts：$max_file （大小：$((max_size/1024/1024)) MB）"
+  [ -z "$max_file" ] && { log "[错误] 未找到 .m2ts"; return 1; }
+  log "[信息] 选定最大 m2ts：$max_file （大小：$((max_size/1024/1024)) MB）"
   M2TS_INPUT="$max_file"; return 0
 }
 
-# —— 目录智能识别
+# —— 目录选择逻辑
 select_input_from_arg(){
   local input="$1"
   if [ -d "$input" ]; then
-    stage "目录输入：智能识别"
-    # 1) ISO（同层最大）
+    log "[提示] 输入为目录，开始智能识别..."
+    # 1) ISO（同层，取最大）
     local iso
     iso=$(find "$input" -maxdepth 1 -type f -iname '*.iso' -printf '%s %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
     if [ -n "$iso" ]; then
       mount_iso "$iso"
       find_largest_m2ts "$MOUNT_DIR" || { echo "[错误] ISO 内无 .m2ts"; exit 1; }
       video="$M2TS_INPUT"
-      info "将使用 m2ts 文件：$video"
+      log "[信息] 将使用 m2ts 文件：$video"
       return 0
     fi
     # 2) BDMV/STREAM
     if [ -d "$input/BDMV/STREAM" ]; then
       find_largest_m2ts_in_dir "$input" || { echo "[错误] 目录内无 .m2ts"; exit 1; }
       video="$M2TS_INPUT"
-      info "将使用 m2ts 文件：$video"
+      log "[信息] 将使用 m2ts 文件：$video"
       return 0
     fi
     # 3) 常见视频（同层）
@@ -213,7 +203,7 @@ select_input_from_arg(){
       echo "[错误] 目录内未发现可用视频文件（无 ISO/BDMV/常见视频）。"; exit 1
     fi
     if [ ${#vids[@]} -eq 1 ]; then
-      video="${vids[0]}"; info "选定视频：$video"; return 0
+      video="${vids[0]}"; log "[信息] 选定视频：$video"; return 0
     fi
     # 多个：优先 E01
     local -a e01=()
@@ -227,24 +217,22 @@ select_input_from_arg(){
         if [ "$sz" -gt "$max" ]; then max=$sz; largest="$f"; fi
       done
       video="$largest"
-      info "多个视频，优先选择包含 E01 的：$video"
+      log "[信息] 多个视频，优先选择包含 E01 的：$video"
       return 0
     fi
     # fallback：体积最大
     local biggest
     biggest=$(printf '%s\0' "${vids[@]}" | xargs -0 -I{} stat -c '%s %n' "{}" | sort -nr | head -1 | cut -d' ' -f2-)
     video="$biggest"
-    warn "多个视频但未发现 E01，改选体积最大：$video"
+    log "[提示] 多个视频但未发现 E01，改选体积最大：$video"
     return 0
   elif is_iso "$input"; then
-    stage "ISO 输入：挂载并选择最大 m2ts"
     mount_iso "$input"
     find_largest_m2ts "$MOUNT_DIR" || { echo "[错误] ISO 内无 .m2ts"; exit 1; }
     video="$M2TS_INPUT"
-    info "将使用 m2ts 文件：$video"
+    log "[信息] 将使用 m2ts 文件：$video"
     return 0
   elif [ -f "$input" ]; then
-    stage "文件输入：直接处理"
     video="$input"
     return 0
   else
@@ -291,7 +279,7 @@ find_external_sub(){
       SUB_LANG="unknown"
     fi
     SUB_CODEC="text"
-    info "选择外挂字幕：$SUB_FILE （语言：$SUB_LANG）"
+    log "[信息] 选择外挂字幕：$SUB_FILE （语言：$SUB_LANG）"
     return 0
   fi
   return 1
@@ -348,7 +336,7 @@ pick_internal_sub(){
   else SUB_LANG="unknown"; fi
 
   SUB_MODE="internal"; SUB_SI="$best_idx"; SUB_CODEC="$best_codec"
-  info "选择内挂字幕：流索引 $SUB_SI （语言：$SUB_LANG，forced=$best_forced，codec：$SUB_CODEC）"
+  log "[信息] 选择内挂字幕：流索引 $SUB_SI （语言：$SUB_LANG，forced=$best_forced，codec：$SUB_CODEC）"
 
   local rel=0 gi
   while IFS= read -r gi; do
@@ -364,14 +352,14 @@ choose_subtitle(){
   local v="$1"
   SUB_MODE="none"; SUB_FILE=""; SUB_SI=""; SUB_REL=""; SUB_LANG=""; SUB_CODEC=""
   if find_external_sub "$v"; then
-    [ "$SUB_LANG" = "en" ] && warn "未找到中文字幕，改用英文外挂字幕。"
+    [ "$SUB_LANG" = "en" ] && log "[提示] 未找到中文字幕，改用英文外挂字幕。"
     return 0
   fi
   if pick_internal_sub "$v"; then
-    [ "$SUB_LANG" = "en" ] && warn "未找到中文字幕，改用英文内挂字幕。"
+    [ "$SUB_LANG" = "en" ] && log "[提示] 未找到中文字幕，改用英文内挂字幕。"
     return 0
   fi
-  warn "未找到可用字幕，将仅截图视频画面。"
+  log "[提示] 未找到可用字幕，将仅截图视频画面。"
   return 1
 }
 
@@ -382,7 +370,7 @@ is_bitmap_sub(){
   esac
 }
 build_text_sub_filter(){
-  # 使用系统默认字体（不显式指定 fontsdir/FontName）
+  # 使用系统默认字体，不额外指定 fontsdir/FontName，最大化兼容性
   if [ "$SUB_MODE" = "external" ]; then
     echo "subtitles='$(escape_squote "$SUB_FILE")'"
   elif [ "$SUB_MODE" = "internal" ]; then
@@ -563,7 +551,7 @@ align_to_subtitle(){
   cand="$(snap_window "$T")"
   if [ -n "${cand:-}" ]; then
     cand="$(clamp_0_dur "$cand")"
-    info "对齐：请求 $(sec_to_hms ${T%.*}) → 就近/扩窗字幕 $(sec_to_hms ${cand%.*})"
+    log "[对齐] 请求 $(sec_to_hms ${T%.*}) → 就近/扩窗字幕 $(sec_to_hms ${cand%.*})"
     echo "$cand"; return 0
   fi
 
@@ -598,7 +586,7 @@ align_to_subtitle(){
   fi
   if [ -n "${cand:-}" ]; then
     cand="$(clamp_0_dur "$cand")"
-    info "对齐：请求 $(sec_to_hms ${T%.*}) → 扩窗字幕 $(sec_to_hms ${cand%.*})"
+    log "[对齐] 请求 $(sec_to_hms ${T%.*}) → 扩窗字幕 $(sec_to_hms ${cand%.*})"
     echo "$cand"; return 0
   fi
 
@@ -606,7 +594,7 @@ align_to_subtitle(){
     cand="$(pgs_nearest_expand "$T")"
     if [ -n "${cand:-}" ] && awk -v a="$cand" -v b="$T" 'BEGIN{d=a-b; if(d<0)d=-d; exit !(d<=1200)}'; then
       cand="$(clamp_0_dur "$cand")"
-      info "对齐：请求 $(sec_to_hms ${T%.*}) → 渐进扩窗 $(sec_to_hms ${cand%.*})"
+      log "[对齐] 请求 $(sec_to_hms ${T%.*}) → 渐进扩窗 $(sec_to_hms ${cand%.*})"
       echo "$cand"; return 0
     fi
   fi
@@ -615,9 +603,9 @@ align_to_subtitle(){
   cand="$(snap_from_index "$T")"
   cand="$(clamp_0_dur "$cand")"
   if [ "$cand" != "$T" ]; then
-    info "对齐：请求 $(sec_to_hms ${T%.*}) → 全片索引 $(sec_to_hms ${cand%.*})"
+    log "[对齐] 请求 $(sec_to_hms ${T%.*}) → 全片索引 $(sec_to_hms ${cand%.*})"
   else
-    warn "周边及全片均未找到字幕事件，按原时间点截图：$(sec_to_hms ${T%.*})"
+    log "[提示] 周边及全片均未找到字幕事件，按原时间点截图：$(sec_to_hms ${T%.*})"
   fi
   echo "$cand"
 }
@@ -632,7 +620,7 @@ build_sub_index(){
   else
     dump_all_sub_events_external | frames_to_index_rel external | sort -n -k1,1 > "$SUB_IDX"
   fi
-  [ -s "$SUB_IDX" ] && { info "已建立字幕索引（文字字幕）。"; return 0; }
+  [ -s "$SUB_IDX" ] && { log "[信息] 已建立字幕索引（文字字幕）。"; return 0; }
   rm -f "$SUB_IDX"; SUB_IDX=""; return 1
 }
 
@@ -646,10 +634,8 @@ do_screenshot(){
   else
     coarse_sec=$(( tnum > COARSE_BACK_TEXT ? tnum - COARSE_BACK_TEXT : 0 ))
   fi
-  local fine_sec
-  fine_sec="$(fsub "$t_aligned" "$coarse_sec")"
-  local coarse_hms
-  coarse_hms="$(sec_to_hms "$coarse_sec")"
+  local fine_sec="$(fsub "$t_aligned" "$coarse_sec")"
+  local coarse_hms="$(sec_to_hms "$coarse_sec")"
 
   if [ "$SUB_MODE" = "internal" ] && is_bitmap_sub; then
     err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
@@ -708,13 +694,13 @@ do_screenshot_reencode(){
 check_and_install_bc
 check_and_install_ffmpeg
 check_and_install_jq
-[ $FIRST_RUN -eq 1 ] && { info "首次运行依赖安装完成。"; echo >&2; }
+[ $FIRST_RUN -eq 1 ] && { log "[提示] 首次运行依赖安装完成。"; log ""; }
 
 validate_arguments "$@"
 
 input_path="$1"; outdir="$2"; shift 2
 
-# 选择实际视频（可能挂载 ISO）
+# 根据输入选择实际视频文件（可能挂载 ISO）
 video=""
 select_input_from_arg "$input_path"
 
@@ -723,24 +709,24 @@ choose_subtitle "$video" || true
 detect_start_offset
 detect_duration
 DURATION_HMS="$(sec_to_hms ${DURATION%.*})"
-info "容器起始偏移：${START_OFFSET}s | 影片总时长：${DURATION_HMS}"
+log "[信息] 容器起始偏移：${START_OFFSET}s | 影片总时长：${DURATION_HMS}"
 
-info "清空截图目录: $outdir"
+log "[信息] 清空截图目录: $outdir"
 rm -rf "${outdir:?}"/*
 
 declare -a TARGET_SECONDS=()
 if [ "$#" -gt 0 ]; then
-  info "已提供时间点：将对齐到附近有字幕后再截图"
+  log "[信息] 已提供时间点：将对齐到附近有字幕后再截图"
   for tp in "$@"; do TARGET_SECONDS+=( "$(hms_to_seconds "$tp")" ); done
 else
-  info "未提供时间点：自动按 20% / 40% / 60% / 80% 选取并确保有字幕"
+  log "[信息] 未提供时间点：自动按 20% / 40% / 60% / 80% 选取并确保有字幕"
   if awk -v d="$DURATION" 'BEGIN{exit !(d>0)}'; then
     for p in "${AUTO_PERC[@]}"; do
       t=$(awk -v d="$DURATION" -v p="$p" 'BEGIN{t=d*p; if(t<5)t=5; if(t>d-5)t=d-5; printf "%.3f",t}')
       TARGET_SECONDS+=( "$t" )
     done
   else
-    warn "时长未知，退化为固定时间点：300/900/1800/2700 秒"
+    log "[警告] 时长未知，退化为固定时间点：300/900/1800/2700 秒"
     TARGET_SECONDS=(300 900 1800 2700)
   fi
   build_sub_index >/dev/null 2>&1 || true
@@ -762,7 +748,7 @@ for T_req in "${TARGET_SECONDS[@]}"; do
   fi
   filepath="$outdir/$filename"
 
-  info "截图: $(sec_to_hms ${T_req%.*}) → 实际 $(sec_to_hms ${T_align%.*}) -> $filename"
+  log "[信息] 截图: $(sec_to_hms ${T_req%.*}) → 实际 $(sec_to_hms ${T_align%.*}) -> $filename"
 
   do_screenshot "$T_align" "$filepath"
   if [ $? -ne 0 ]; then ((fail_count++)); continue; fi
@@ -770,7 +756,7 @@ for T_req in "${TARGET_SECONDS[@]}"; do
   size_bytes=$(stat -c%s "$filepath")
   size_mb=$(echo "scale=2; $size_bytes/1024/1024" | bc)
   if (( $(echo "$size_mb > 10" | bc -l) )); then
-    warn "$filename 大小 ${size_mb}MB，重拍并映射到 SDR..."
+    log "[提示] $filename 大小 ${size_mb}MB，重拍并映射到 SDR..."
     do_screenshot_reencode "$T_align" "$filepath"
     [ $? -eq 0 ] && ((success_count++)) || ((fail_count++))
   else
@@ -780,16 +766,14 @@ done
 
 end_time=$(date +%s); elapsed=$((end_time-start_time)); minutes=$((elapsed/60)); seconds=$((elapsed%60))
 
-echo >&2
-echo "===== 任务完成 =====" >&2
-echo "成功: ${success_count} 张 | 失败: ${fail_count} 张" >&2
-echo "总耗时: ${minutes}分${seconds}秒" >&2
+echo
+echo "===== 任务完成 ====="
+echo "成功: ${success_count} 张 | 失败: ${fail_count} 张"
+echo "总耗时: ${minutes}分${seconds}秒"
 
 if [ $fail_count -gt 0 ]; then
-  echo >&2; echo "===== 失败详情 =====" >&2
+  echo; echo "===== 失败详情 ====="
   for i in "${!failed_files[@]}"; do
-    echo "[失败] 文件: ${failed_files[$i]}" >&2
-    echo "原因: ${failed_reasons[$i]}" >&2
-    echo >&2
+    echo "[失败] 文件: ${failed_files[$i]}"; echo "原因: ${failed_reasons[$i]}"; echo
   done
 fi
