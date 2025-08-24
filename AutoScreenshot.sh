@@ -43,6 +43,7 @@ download_and_execute() {
     bash "$script_path" "$INPUT" "$OUTDIR" "$@"
 }
 
+# 下载并执行截图脚本
 download_and_execute "https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots.sh" "screenshots.sh" "$@"
 
 # 检查产物
@@ -55,5 +56,5 @@ if [ "$COUNT" -eq 0 ]; then
 fi
 info "[信息] 截图完成，发现 $COUNT 张图片。"
 
-# Step 2 上传（stderr 加前缀，stdout 纯 BBCode）
+# 下载并执行上传脚本
 download_and_execute "https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/PixhostUpload.sh" "PixhostUpload.sh"
