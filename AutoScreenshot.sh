@@ -25,18 +25,25 @@ fi
 
 INPUT="$1"; OUTDIR="$2"; shift 2
 
-[ -f "$SS" ] || { err "[错误] 未找到脚本：$SS"; exit 1; }
-[ -f "$UP" ] || { err "[错误] 未找到脚本：$UP"; exit 1; }
+# 下载并执行 screenshots.sh 和 PixhostUpload.sh 脚本
+download_and_execute() {
+    local script_url="$1"
+    local script_name="$2"
+    local script_path="$SELF_DIR/$script_name"
 
-# 修正可能的 CRLF（避免 $'\r' 报错）
-sed -i 's/\r$//' "$SS" "$UP" 2>/dev/null || true
+    echo "[信息] 下载脚本 $script_name ..."
+    curl -s -o "$script_path" "$script_url"
+    if [ ! -f "$script_path" ]; then
+        err "[错误] 无法下载脚本：$script_name"
+        exit 1
+    fi
 
-# Step 1 截图
-banner "Step 1/2 截图"
-if ! bash "$SS" "$INPUT" "$OUTDIR" "$@"; then
-  err "[错误] 截图失败，脚本停止执行。"
-  exit 1
-fi
+    chmod +x "$script_path"
+    echo "[信息] 执行 $script_name ..."
+    bash "$script_path" "$INPUT" "$OUTDIR" "$@"
+}
+
+download_and_execute "https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots.sh" "screenshots.sh" "$@"
 
 # 检查产物
 mapfile -t IMGS < <(find "$OUTDIR" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) | sort)
@@ -49,15 +56,4 @@ fi
 info "[信息] 截图完成，发现 $COUNT 张图片。"
 
 # Step 2 上传（stderr 加前缀，stdout 纯 BBCode）
-banner "Step 2/2 上传到 PixHost"
-BBCODE="$(bash "$UP" "$OUTDIR" 2> >(sed -u 's/^/[上传] /' >&2))" || true
-
-echo
-if [ -n "$BBCODE" ]; then
-  info "[信息] BBCode 原图直链如下："
-  echo "$BBCODE"
-else
-  err "[警告] 未获取到任何 BBCode 直链，请查看上方 [上传] 日志。"
-fi
-
-banner "全部完成"
+download_and_execute "https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/PixhostUpload.sh" "PixhostUpload.sh"
