@@ -135,10 +135,10 @@ validate_arguments(){
     exit 1
   fi
 
+  # 如果输出目录不存在，则创建
   if [ ! -d "$outdir" ]; then
-    echo "[错误] 输出目录无效：$outdir"
-    echo "正确用法: $0 <视频/ISO/目录> <输出目录> [时间点...]"
-    exit 1
+    log "[提示] 输出目录不存在，正在创建：$outdir"
+    mkdir -p "$outdir" || { log "[错误] 创建输出目录失败：$outdir"; exit 1; }
   fi
 
   shift 2
@@ -151,6 +151,7 @@ validate_arguments(){
     fi
   done
 }
+
 
 
 # —— ISO & m2ts
