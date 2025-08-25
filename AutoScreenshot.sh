@@ -19,10 +19,14 @@ if [ ! -d "$VIDEO_DIR" ]; then
   exit 1
 fi
 
-# 检查截图保存目录是否有效
+# 检查截图保存目录是否存在，如果不存在则创建
 if [ ! -d "$SCREENSHOT_DIR" ]; then
-  echo "[错误] 截图保存目录不存在：$SCREENSHOT_DIR"
-  exit 1
+  echo "[信息] 截图保存目录不存在，正在创建目录：$SCREENSHOT_DIR"
+  mkdir -p "$SCREENSHOT_DIR"
+  if [ $? -ne 0 ]; then
+    echo "[错误] 创建截图保存目录失败：$SCREENSHOT_DIR"
+    exit 1
+  fi
 fi
 
 # 调用 screenshots.sh 进行截图
