@@ -331,10 +331,16 @@ pick_internal_sub(){
 
   local best_idx="" best_codec="" best_lang_raw="" best_forced=""
 
+  # 针对 PGS 字幕流的改进：如果 codec_name 是 "hdmv_pgs_subtitle"，则手动识别中文
   pick_by_langset(){
     local want_forced="$1" want_lang="$2" idx codec lang forced
     while IFS=$'\t' read -r idx codec lang forced; do
       [ -z "${idx:-}" ] && continue
+      # 如果是 PGS 字幕且语言为中文（根据流名判断）
+      if [[ "$codec" == "hdmv_pgs_subtitle" ]] && has_lang_token "$lang" "chinese"; then
+        best_idx="$idx"; best_codec="$codec"; best_lang_raw="zh"; best_forced="$forced"; return 0
+      fi
+      # 优先选中文字幕
       if [ "$want_lang" = "zh" ]; then
         has_lang_token "$lang" "${LANGS_ZH[@]}" && [ "$forced" = "$want_forced" ] && {
           best_idx="$idx"; best_codec="$codec"; best_lang_raw="$lang"; best_forced="$forced"; return 0; }
@@ -376,6 +382,7 @@ pick_internal_sub(){
   return 0
 }
 
+
 choose_subtitle(){
   local v="$1"
   SUB_MODE="none"; SUB_FILE=""; SUB_SI=""; SUB_REL=""; SUB_LANG=""; SUB_CODEC=""
@@ -390,6 +397,7 @@ choose_subtitle(){
   log "[提示] 未找到可用字幕，将仅截图视频画面。"
   return 1
 }
+
 
 is_bitmap_sub(){
   case "$(lower "${SUB_CODEC:-}")" in
@@ -668,22 +676,23 @@ do_screenshot(){
   if [ "$SUB_MODE" = "internal" ] && is_bitmap_sub; then
     err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
       -i "$video" -ss "$fine_sec" \
-      -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay" \
+      -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay=(W-w)/2:(H-h-10)" \
       -frames:v 1 -y "$path" 2>&1)
   else
     local subf; subf="$(build_text_sub_filter)"
     if [ -n "$subf" ]; then
       err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
-        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 -vf "$subf" "$path" 2>&1)
+        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 -vf "$subf,overlay=(W-w)/2:(H-h-10)" "$path" 2>&1)
     else
       err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
-        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 "$path" 2>&1)
+        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 -vf "overlay=(W-w)/2:(H-h-10)" "$path" 2>&1)
     fi
   fi
   local ret=$?
   if [ $ret -ne 0 ]; then failed_files+=("$(basename "$path")"); failed_reasons+=("$err"); fi
   return $ret
 }
+
 do_screenshot_reencode(){
   local t_aligned="$1" path="$2" err
   local tnum="${t_aligned%.*}"; [[ "$tnum" =~ ^[0-9]+$ ]] || tnum=0
@@ -699,15 +708,13 @@ do_screenshot_reencode(){
   if [ "$SUB_MODE" = "internal" ] && is_bitmap_sub; then
     err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
       -i "$video" -ss "$fine_sec" \
-      -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay,format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24" \
+      -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay=(W-w)/2:(H-h-10),format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24" \
       -frames:v 1 -y -c:v png -compression_level 9 -pred mixed "$path" 2>&1)
   else
     local subf; subf="$(build_text_sub_filter)"
-    local vf_chain=""
+    local vf_chain="overlay=(W-w)/2:(H-h-10),format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24"
     if [ -n "$subf" ]; then
-      vf_chain="$subf,format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24"
-    else
-      vf_chain="format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24"
+      vf_chain="$subf,$vf_chain"
     fi
     err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
       -i "$video" -ss "$fine_sec" -map 0:v:0 -frames:v 1 -y -vf "$vf_chain" \
@@ -717,6 +724,7 @@ do_screenshot_reencode(){
   if [ $ret -ne 0 ]; then failed_files+=("$(basename "$path")"); failed_reasons+=("$err"); fi
   return $ret
 }
+
 
 # ---------------- 主流程 ----------------
 check_and_install_bc
