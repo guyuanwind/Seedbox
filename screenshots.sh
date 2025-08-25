@@ -330,8 +330,8 @@ pick_internal_sub(){
   [ -z "$parsed" ] && return 1
 
   local best_idx="" best_codec="" best_lang_raw="" best_forced=""
-
-  # 针对 PGS 字幕流的改进：如果 codec_name 是 "hdmv_pgs_subtitle"，则手动识别中文
+  local last_idx="" last_codec="" last_lang_raw="" last_forced=""
+  
   pick_by_langset(){
     local want_forced="$1" want_lang="$2" idx codec lang forced
     while IFS=$'\t' read -r idx codec lang forced; do
@@ -356,11 +356,19 @@ pick_internal_sub(){
     pick_by_langset "0" "en" || pick_by_langset "1" "en" || true
   }
 
+  # 如果没有找到合适的字幕，选择最后一个字幕流
   if [ -z "$best_idx" ]; then
-    best_idx=$(echo "$parsed" | head -n1 | awk -F'\t' '{print $1}')
-    best_codec=$(echo "$parsed" | head -n1 | awk -F'\t' '{print $2}')
-    best_lang_raw=$(echo "$parsed" | head -n1 | awk -F'\t' '{print $3}')
-    best_forced=$(echo "$parsed" | head -n1 | awk -F'\t' '{print $4}')
+    # 遍历字幕流，找到最后一个字幕流
+    while IFS=$'\t' read -r idx codec lang forced; do
+      last_idx="$idx"
+      last_codec="$codec"
+      last_lang_raw="$lang"
+      last_forced="$forced"
+    done <<< "$parsed"
+    best_idx="$last_idx"
+    best_codec="$last_codec"
+    best_lang_raw="$last_lang_raw"
+    best_forced="$last_forced"
   fi
 
   [ -n "$best_idx" ] || return 1
@@ -383,6 +391,7 @@ pick_internal_sub(){
 }
 
 
+
 choose_subtitle(){
   local v="$1"
   SUB_MODE="none"; SUB_FILE=""; SUB_SI=""; SUB_REL=""; SUB_LANG=""; SUB_CODEC=""
@@ -397,6 +406,7 @@ choose_subtitle(){
   log "[提示] 未找到可用字幕，将仅截图视频画面。"
   return 1
 }
+
 
 
 is_bitmap_sub(){
