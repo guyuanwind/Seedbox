@@ -684,6 +684,7 @@ do_screenshot(){
   local coarse_hms="$(sec_to_hms "$coarse_sec")"
 
   if [ "$SUB_MODE" = "internal" ] && is_bitmap_sub; then
+    # 位图字幕：双输入 overlay（保持原样）
     err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
       -i "$video" -ss "$fine_sec" \
       -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay=(W-w)/2:(H-h-10)" \
@@ -691,11 +692,13 @@ do_screenshot(){
   else
     local subf; subf="$(build_text_sub_filter)"
     if [ -n "$subf" ]; then
+      # 文本字幕：只用 subtitles，不要 overlay
       err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
-        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 -vf "$subf,overlay=(W-w)/2:(H-h-10)" "$path" 2>&1)
+        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 -vf "$subf" "$path" 2>&1)
     else
+      # 无字幕：不加任何滤镜
       err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
-        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 -vf "overlay=(W-w)/2:(H-h-10)" "$path" 2>&1)
+        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 "$path" 2>&1)
     fi
   fi
   local ret=$?
@@ -716,13 +719,16 @@ do_screenshot_reencode(){
   local coarse_hms="$(sec_to_hms "$coarse_sec")"
 
   if [ "$SUB_MODE" = "internal" ] && is_bitmap_sub; then
+    # 位图字幕 + SDR 映射：仍需 overlay，后接色调映射
     err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
       -i "$video" -ss "$fine_sec" \
       -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay=(W-w)/2:(H-h-10),format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24" \
       -frames:v 1 -y -c:v png -compression_level 9 -pred mixed "$path" 2>&1)
   else
     local subf; subf="$(build_text_sub_filter)"
-    local vf_chain="overlay=(W-w)/2:(H-h-10),format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24"
+    # 先准备色调映射链
+    local vf_chain="format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24"
+    # 如有文本字幕，前置 subtitles；无字幕就只做色调映射
     if [ -n "$subf" ]; then
       vf_chain="$subf,$vf_chain"
     fi
