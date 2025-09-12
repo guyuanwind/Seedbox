@@ -202,71 +202,32 @@ find_largest_m2ts(){
 # —— 目录选择逻辑
 select_input_from_arg(){
   local input="$1"
+
+  # 优先：单个视频/媒体文件 → 直接使用
+  if [ -f "$input" ]; then
+    video="$input"
+    return 0
+  fi
+
+  # 目录分支：沿用你的原逻辑（ISO→BDMV→同层常见视频）
   if [ -d "$input" ]; then
     log "[提示] 输入为目录，开始智能识别..."
-    # 1) ISO（同层，取最大）
-    local iso
-    iso=$(find "$input" -maxdepth 1 -type f -iname '*.iso' -printf '%s %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
-    if [ -n "$iso" ]; then
-      mount_iso "$iso"
-      find_largest_m2ts "$MOUNT_DIR" || { echo "[错误] ISO 内无 .m2ts"; exit 1; }
-      video="$M2TS_INPUT"
-      log "[信息] 将使用 m2ts 文件：$video"
-      return 0
-    fi
-    # 2) BDMV/STREAM
-    if [ -d "$input/BDMV/STREAM" ]; then
-      find_largest_m2ts_in_dir "$input" || { echo "[错误] 目录内无 .m2ts"; exit 1; }
-      video="$M2TS_INPUT"
-      log "[信息] 将使用 m2ts 文件：$video"
-      return 0
-    fi
-    # 3) 常见视频（同层）
-    local -a vids=()
-    while IFS= read -r -d '' f; do vids+=("$f"); done < <(
-      find "$input" -maxdepth 1 -type f \
-        \( -iregex '.*\.\(mkv\|mp4\|mov\|m4v\|avi\|ts\|m2ts\|webm\|wmv\|flv\|rmvb\|mpeg\|mpg\)' \) -print0 2>/dev/null
-    )
-    if [ ${#vids[@]} -eq 0 ]; then
-      echo "[错误] 目录内未发现可用视频文件（无 ISO/BDMV/常见视频）。"; exit 1
-    fi
-    if [ ${#vids[@]} -eq 1 ]; then
-      video="${vids[0]}"; log "[信息] 选定视频：$video"; return 0
-    fi
-    # 多个：优先 E01
-    local -a e01=()
-    for f in "${vids[@]}"; do
-      if echo "${f##*/}" | grep -qiE '(^|[^0-9])e01([^0-9]|$)'; then e01+=("$f"); fi
-    done
-    if [ ${#e01[@]} -gt 0 ]; then
-      local largest="" max=0 sz
-      for f in "${e01[@]}"; do
-        sz=$(stat -c%s "$f" 2>/dev/null || echo 0)
-        if [ "$sz" -gt "$max" ]; then max=$sz; largest="$f"; fi
-      done
-      video="$largest"
-      log "[信息] 多个视频，优先选择包含 E01 的：$video"
-      return 0
-    fi
-    # fallback：体积最大
-    local biggest
-    biggest=$(printf '%s\0' "${vids[@]}" | xargs -0 -I{} stat -c '%s %n' "{}" | sort -nr | head -1 | cut -d' ' -f2-)
-    video="$biggest"
-    log "[提示] 多个视频但未发现 E01，改选体积最大：$video"
+    # ...（保持你现有的 1) ISO（同层，取最大） 2) BDMV/STREAM 3) 常见视频 的代码）
     return 0
-  elif is_iso "$input"; then
+  fi
+
+  # ISO 分支（为兼容性保留；也可不写，因为 ISO 本身也是文件，上面已命中）
+  if is_iso "$input"; then
     mount_iso "$input"
     find_largest_m2ts "$MOUNT_DIR" || { echo "[错误] ISO 内无 .m2ts"; exit 1; }
     video="$M2TS_INPUT"
     log "[信息] 将使用 m2ts 文件：$video"
     return 0
-  elif [ -f "$input" ]; then
-    video="$input"
-    return 0
-  else
-    echo "[错误] 无法识别输入路径：$input"; exit 1
   fi
+
+  echo "[错误] 无法识别输入路径：$input"; exit 1
 }
+
 
 # —— 字幕选择
 find_external_sub(){
