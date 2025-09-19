@@ -2,7 +2,7 @@
 # 批量截图（目录智能识别 + 就近对齐“必有字幕”）
 # - 输入：视频文件 / ISO / 目录
 #   · 目录：先找 ISO(最大)→挂载→最大 .m2ts；否则找 BDMV/STREAM；否则找常见视频
-#     - 多视频时优先选择文件名包含 E01 的（不区分大小写；如多个取体积最大）；否则取体积最大
+#     - 多视频时优先选择第一集（E01等格式，不区分大小写；如多个取体积最大）；否则取体积最大
 # - 时间点：提供则就近对齐；未提供则自动取 20%/40%/60%/80% 并对齐
 # - 字幕优先：中文 → 英文 → 其他/无；无中文但有英文会提示；无字幕则只截画面并提示
 # - 位图字幕(如 PGS) overlay；文本字幕(ASS/SRT) subtitles（使用系统默认字体）
@@ -256,10 +256,14 @@ select_input_from_arg(){
     if [ ${#vids[@]} -eq 1 ]; then
       video="${vids[0]}"; log "[信息] 选定视频：$video"; return 0
     fi
-    # 多个：优先含 E01 的最大者，否则体积最大
+    # 多个：优先含 E01（第一集）的最大者，否则体积最大
     local -a e01=()
     for f in "${vids[@]}"; do
-      if echo "${f##*/}" | grep -qiE '(^|[^0-9])e01([^0-9]|$)'; then e01+=("$f"); fi
+      local filename="${f##*/}"
+      # 增强的第一集识别：支持 E01, E1, S01E01, S1E1 等格式，以及中文描述
+      if echo "$filename" | grep -qiE '(e0?1([^0-9]|$)|第一集|第1集|episode.?1|ep.?1|pilot)'; then 
+        e01+=("$f")
+      fi
     done
     if [ ${#e01[@]} -gt 0 ]; then
       local largest="" max=0 sz
@@ -268,13 +272,13 @@ select_input_from_arg(){
         if [ "$sz" -gt "$max" ]; then max=$sz; largest="$f"; fi
       done
       video="$largest"
-      log "[信息] 多个视频，优先选择包含 E01 的：$video"
+      log "[信息] 多个视频，优先选择包含第一集的：$video"
       return 0
     fi
     local biggest
     biggest=$(printf '%s\0' "${vids[@]}" | xargs -0 -I{} stat -c '%s %n' "{}" | sort -nr | head -1 | cut -d' ' -f2-)
     video="$biggest"
-    log "[提示] 多个视频但未发现 E01，改选体积最大：$video"
+    log "[提示] 多个视频但未发现第一集，改选体积最大：$video"
     return 0
   fi
 
