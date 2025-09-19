@@ -434,7 +434,7 @@ build_text_sub_filter(){
   if [ "$SUB_MODE" = "external" ]; then
     echo "subtitles='$(escape_squote "$SUB_FILE")'"
   elif [ "$SUB_MODE" = "internal" ]; then
-    echo "subtitles='$(escape_squote "$video"):si=${SUB_SI}'"
+    echo "subtitles='$(escape_squote "$video"):si=${SUB_REL}'"
   else
     echo ""
   fi
