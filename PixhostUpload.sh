@@ -1,5 +1,5 @@
 #!/bin/bash
-# PixHost 批量上传脚本 (输出BBCode格式的原始大图直链)
+# PixHost 批量上传脚本 (统一输出BBCode格式和图片直链)
 # 用法: ./PixHostUpload.sh <图片目录路径>
 
 # 依赖检查
@@ -96,6 +96,8 @@ upload_image() {
 main() {
     check_deps
     local total=0 success=0
+    local bbcode_links=()
+    local direct_links=()
 
     # 统计文件
     total=$(find "$DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \) | wc -l)
@@ -112,9 +114,25 @@ main() {
         
         if direct_url=$(upload_image "$image"); then
             ((success++))
-            echo "[img]$direct_url[/img]"  # 输出BBCode格式
+            bbcode_links+=("[img]$direct_url[/img]")
+            direct_links+=("$direct_url")
+            echo "已上传: $(basename "$image")"
         fi
     done < <(find "$DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \) | sort)
+
+    # 统一输出结果
+    echo
+    if [ "$success" -gt 0 ]; then
+        echo "bbcode代码链接："
+        for bbcode in "${bbcode_links[@]}"; do
+            echo "$bbcode"
+        done
+        
+        echo "图片直链："
+        for direct in "${direct_links[@]}"; do
+            echo "$direct"
+        done
+    fi
 
     # 结果报告
     echo
@@ -122,5 +140,5 @@ main() {
     [ "$success" -eq 0 ] && exit 1 || exit 0
 }
 
-# 执行 (纯净BBCode输出)
+# 执行 (统一输出BBCode格式和图片直链)
 main
