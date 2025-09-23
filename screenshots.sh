@@ -688,6 +688,36 @@ build_sub_index(){
   rm -f "$SUB_IDX"; SUB_IDX=""; return 1
 }
 
+# —— 色彩空间检测
+detect_colorspace(){
+  local vpath="$1"
+  ffprobe -v error -select_streams v:0 \
+    -show_entries stream=color_space,color_primaries,color_transfer \
+    -of default=noprint_wrappers=1 "$vpath" 2>/dev/null | \
+    grep -E "^(color_space|color_primaries|color_transfer)=" | \
+    sort | tr '\n' '|'
+}
+
+# —— 构建兼容的色彩空间转换链
+build_colorspace_chain(){
+  local cs_info="$1"
+  local chain=""
+  
+  # 检测是否为HDR内容（bt2020/smpte2084/arib-std-b67）
+  if [[ "$cs_info" == *"bt2020"* ]] && [[ "$cs_info" == *"smpte2084"* || "$cs_info" == *"arib-std-b67"* ]]; then
+    # HDR到SDR转换 - 使用更兼容的参数
+    chain="format=yuv420p10le,zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709:t=bt709,tonemap=hable:desat=0,format=rgb24"
+  elif [[ "$cs_info" == *"bt2020"* ]]; then
+    # BT.2020但非HDR，简单色域转换
+    chain="format=rgb24,scale=in_color_matrix=bt2020:out_color_matrix=bt709"
+  else
+    # 标准色彩空间，直接转换为RGB
+    chain="format=rgb24"
+  fi
+  
+  echo "$chain"
+}
+
 # —— 截图
 do_screenshot(){
   local t_aligned="$1" path="$2" err
@@ -706,17 +736,19 @@ do_screenshot(){
     err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
       -i "$video" -ss "$fine_sec" \
       -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay=(W-w)/2:(H-h-10)" \
-      -frames:v 1 -y "$path" 2>&1)
+      -frames:v 1 -c:v png -compression_level 9 -pred mixed -y "$path" 2>&1)
   else
     local subf; subf="$(build_text_sub_filter)"
     if [ -n "$subf" ]; then
       # 文本字幕：只用 subtitles，不要 overlay
       err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
-        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 -vf "$subf" "$path" 2>&1)
+        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 -vf "$subf" \
+        -c:v png -compression_level 9 -pred mixed "$path" 2>&1)
     else
       # 无字幕：不加任何滤镜
       err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
-        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 "$path" 2>&1)
+        -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 \
+        -c:v png -compression_level 9 -pred mixed "$path" 2>&1)
     fi
   fi
   local ret=$?
@@ -736,17 +768,20 @@ do_screenshot_reencode(){
   local fine_sec="$(fsub "$t_aligned" "$coarse_sec")"
   local coarse_hms="$(sec_to_hms "$coarse_sec")"
 
+  # 检测色彩空间并构建转换链
+  local cs_info; cs_info="$(detect_colorspace "$video")"
+  local color_chain; color_chain="$(build_colorspace_chain "$cs_info")"
+  
   if [ "$SUB_MODE" = "internal" ] && is_bitmap_sub; then
-    # 位图字幕 + SDR 映射：仍需 overlay，后接色调映射
+    # 位图字幕 + 色彩空间转换：overlay 后接色彩转换
     err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
       -i "$video" -ss "$fine_sec" \
-      -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay=(W-w)/2:(H-h-10),format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24" \
+      -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay=(W-w)/2:(H-h-10),${color_chain}" \
       -frames:v 1 -y -c:v png -compression_level 9 -pred mixed "$path" 2>&1)
   else
     local subf; subf="$(build_text_sub_filter)"
-    # 先准备色调映射链
-    local vf_chain="format=gbrpf32le,zscale=pin=bt2020:p=bt709:t=linear:npl=100,tonemap=hable:desat=0:peak=5,format=rgb24"
-    # 如有文本字幕，前置 subtitles；无字幕就只做色调映射
+    local vf_chain="$color_chain"
+    # 如有文本字幕，前置 subtitles；无字幕就只做色彩转换
     if [ -n "$subf" ]; then
       vf_chain="$subf,$vf_chain"
     fi
@@ -779,6 +814,15 @@ choose_subtitle "$video" || true
 detect_start_offset
 detect_duration
 DURATION_HMS="$(sec_to_hms ${DURATION%.*})"
+
+# 检测色彩空间信息
+CS_INFO="$(detect_colorspace "$video")"
+if [ -n "$CS_INFO" ]; then
+  log "[信息] 检测到色彩空间：${CS_INFO%|}"
+else
+  log "[信息] 无法检测色彩空间，将使用标准转换"
+fi
+
 log "[信息] 容器起始偏移：${START_OFFSET}s | 影片总时长：${DURATION_HMS}"
 
 log "[信息] 清空截图目录: $outdir"
