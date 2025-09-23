@@ -1,18 +1,42 @@
 #!/bin/bash
 # AutoScreenshot.sh
 # 该脚本将依次调用 screenshots.sh 和 PixhostUpload.sh
-# 本版更新：第一个参数可为“视频文件”或“目录”（含 .mp4/.mkv/.iso/.m2ts 等）
+# 本版更新：第一个参数可为"视频文件"或"目录"（含 .mp4/.mkv/.iso/.m2ts 等）
+# 新增功能：支持 -jpg 参数切换到高速JPG截图模式
 
-# 1) 参数校验
+# 1) 参数校验和JPG模式检测
+USE_JPG=false
+JPG_ARGS=()
+
+# 检查所有参数中是否包含 -jpg
+for arg in "$@"; do
+  if [ "$arg" = "-jpg" ]; then
+    USE_JPG=true
+  else
+    JPG_ARGS+=("$arg")
+  fi
+done
+
+# 重新设置参数（去除-jpg）
+set -- "${JPG_ARGS[@]}"
+
 if [ "$#" -lt 2 ]; then
   echo "[错误] 参数缺失：必须提供【视频文件或目录】和【截图保存目录】。"
-  echo "正确用法: $0 <视频文件或目录> <截图保存目录> [时间点...]"
+  echo "正确用法: $0 <视频文件或目录> <截图保存目录> [时间点...] [-jpg]"
+  echo "  -jpg: 使用高速JPG截图模式（可选，默认PNG模式）"
   exit 1
 fi
 
 VIDEO_PATH="$1"
 SCREENSHOT_DIR="$2"
 shift 2  # 移除前两个参数，剩余的都是时间点参数
+
+# 显示当前使用的模式
+if [ "$USE_JPG" = true ]; then
+  echo "[模式] 高速JPG截图模式已启用"
+else
+  echo "[模式] 标准PNG截图模式（默认）"
+fi
 
 # 2) 校验“视频输入路径”既可以是文件也可以是目录
 if [ ! -e "$VIDEO_PATH" ]; then
@@ -45,10 +69,16 @@ if [ ! -d "$SCREENSHOT_DIR" ]; then
   fi
 fi
 
-# 4) 调用 screenshots.sh 进行截图（核心流程不变）
-echo "[信息] 调用 screenshots.sh 进行截图..."
-bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots.sh) "$VIDEO_PATH" "$SCREENSHOT_DIR" "$@"
-RET=$?
+# 4) 根据模式选择截图脚本
+if [ "$USE_JPG" = true ]; then
+  echo "[信息] 调用 screenshots_jpg.sh 进行高速JPG截图..."
+  bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots_jpg.sh) "$VIDEO_PATH" "$SCREENSHOT_DIR" "$@"
+  RET=$?
+else
+  echo "[信息] 调用 screenshots.sh 进行PNG截图..."
+  bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots.sh) "$VIDEO_PATH" "$SCREENSHOT_DIR" "$@"
+  RET=$?
+fi
 
 # 5) 若截图成功则上传（核心流程不变）
 if [ $RET -eq 0 ]; then
@@ -59,4 +89,8 @@ else
   exit 1
 fi
 
-echo "[信息] 操作完成。"
+if [ "$USE_JPG" = true ]; then
+  echo "[信息] JPG截图模式操作完成。"
+else
+  echo "[信息] PNG截图模式操作完成。"
+fi
