@@ -720,7 +720,7 @@ build_colorspace_chain(){
 
 # —— 截图
 do_screenshot(){
-  local t_aligned="$1" path="$2" err
+  local t_aligned="$1" path="$2"
   local tnum="${t_aligned%.*}"; [[ "$tnum" =~ ^[0-9]+$ ]] || tnum=0
   local coarse_sec
   if [ "$SUB_MODE" = "internal" ] && is_bitmap_sub; then
@@ -733,31 +733,28 @@ do_screenshot(){
 
   if [ "$SUB_MODE" = "internal" ] && is_bitmap_sub; then
     # 位图字幕：双输入 overlay（保持原样）
-    err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
+    ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
       -i "$video" -ss "$fine_sec" \
       -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay=(W-w)/2:(H-h-10)" \
-      -frames:v 1 -c:v png -compression_level 9 -pred mixed -y "$path" 2>&1)
+      -frames:v 1 -c:v png -compression_level 9 -pred mixed -y "$path"
   else
     local subf; subf="$(build_text_sub_filter)"
     if [ -n "$subf" ]; then
       # 文本字幕：只用 subtitles，不要 overlay
-      err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
+      ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
         -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 -vf "$subf" \
-        -c:v png -compression_level 9 -pred mixed "$path" 2>&1)
+        -c:v png -compression_level 9 -pred mixed "$path"
     else
       # 无字幕：不加任何滤镜
-      err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
+      ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
         -i "$video" -ss "$fine_sec" -map 0:v:0 -y -frames:v 1 \
-        -c:v png -compression_level 9 -pred mixed "$path" 2>&1)
+        -c:v png -compression_level 9 -pred mixed "$path"
     fi
   fi
-  local ret=$?
-  if [ $ret -ne 0 ]; then failed_files+=("$(basename "$path")"); failed_reasons+=("$err"); fi
-  return $ret
 }
 
 do_screenshot_reencode(){
-  local t_aligned="$1" path="$2" err
+  local t_aligned="$1" path="$2"
   local tnum="${t_aligned%.*}"; [[ "$tnum" =~ ^[0-9]+$ ]] || tnum=0
   local coarse_sec
   if [ "$SUB_MODE" = "internal" ] && is_bitmap_sub; then
@@ -774,10 +771,10 @@ do_screenshot_reencode(){
   
   if [ "$SUB_MODE" = "internal" ] && is_bitmap_sub; then
     # 位图字幕 + 色彩空间转换：overlay 后接色彩转换
-    err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
+    ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
       -i "$video" -ss "$fine_sec" \
       -filter_complex "[0:v:0][0:s:${SUB_REL}]overlay=(W-w)/2:(H-h-10),${color_chain}" \
-      -frames:v 1 -y -c:v png -compression_level 9 -pred mixed "$path" 2>&1)
+      -frames:v 1 -y -c:v png -compression_level 9 -pred mixed "$path"
   else
     local subf; subf="$(build_text_sub_filter)"
     local vf_chain="$color_chain"
@@ -785,13 +782,10 @@ do_screenshot_reencode(){
     if [ -n "$subf" ]; then
       vf_chain="$subf,$vf_chain"
     fi
-    err=$(ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
+    ffmpeg -v error -fflags +genpts -ss "$coarse_hms" -probesize "$PROBESIZE" -analyzeduration "$ANALYZE" \
       -i "$video" -ss "$fine_sec" -map 0:v:0 -frames:v 1 -y -vf "$vf_chain" \
-      -c:v png -compression_level 9 -pred mixed "$path" 2>&1)
+      -c:v png -compression_level 9 -pred mixed "$path"
   fi
-  local ret=$?
-  if [ $ret -ne 0 ]; then failed_files+=("$(basename "$path")"); failed_reasons+=("$err"); fi
-  return $ret
 }
 
 
@@ -864,15 +858,34 @@ for T_req in "${TARGET_SECONDS[@]}"; do
 
   log "[信息] 截图: $(sec_to_hms ${T_req%.*}) → 实际 $(sec_to_hms ${T_align%.*}) -> $filename"
 
-  do_screenshot "$T_align" "$filepath"
-  if [ $? -ne 0 ]; then ((fail_count++)); continue; fi
+  # 捕获首次截图的真实错误信息
+  first_shot_output=$(do_screenshot "$T_align" "$filepath" 2>&1)
+  ret=$?
+  if [ $ret -ne 0 ]; then
+    # 记录真实的FFmpeg错误信息
+    failed_files+=("$(basename "$filepath")")
+    failed_reasons+=("$first_shot_output")
+    ((fail_count++))
+    continue
+  fi
 
   size_bytes=$(stat -c%s "$filepath")
   size_mb=$(echo "scale=2; $size_bytes/1024/1024" | bc)
   if (( $(echo "$size_mb > 10" | bc -l) )); then
     log "[提示] $filename 大小 ${size_mb}MB，重拍并映射到 SDR..."
-    do_screenshot_reencode "$T_align" "$filepath"
-    [ $? -eq 0 ] && ((success_count++)) || ((fail_count++))
+    # 捕获FFmpeg的真实输出和错误信息
+    ffmpeg_output=$(do_screenshot_reencode "$T_align" "$filepath" 2>&1)
+    ret=$?
+    
+    # 基于真实结果判断，而不是猜想
+    if [ $ret -eq 0 ]; then
+      ((success_count++))
+    else
+      # FFmpeg返回非零，记录真实的错误信息
+      ((fail_count++))
+      failed_files+=("$(basename "$filepath")")
+      failed_reasons+=("$ffmpeg_output")
+    fi
   else
     ((success_count++))
   fi
@@ -888,6 +901,8 @@ echo "总耗时: ${minutes}分${seconds}秒"
 if [ $fail_count -gt 0 ]; then
   echo; echo "===== 失败详情 ====="
   for i in "${!failed_files[@]}"; do
-    echo "[失败] 文件: ${failed_files[$i]}"; echo "原因: ${failed_reasons[$i]}"; echo
+    echo "[失败] 文件: ${failed_files[$i]}"
+    echo "原因: ${failed_reasons[$i]}"
+    echo
   done
 fi
