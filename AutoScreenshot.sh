@@ -3,27 +3,32 @@
 # 该脚本将依次调用 screenshots.sh 和 PixhostUpload.sh
 # 本版更新：第一个参数可为"视频文件"或"目录"（含 .mp4/.mkv/.iso/.m2ts 等）
 # 新增功能：支持 -jpg 参数切换到高速JPG截图模式
+# 新增功能：支持 -fast 参数切换到极速截图模式
 
-# 1) 参数校验和JPG模式检测
+# 1) 参数校验和JPG/FAST模式检测
 USE_JPG=false
-JPG_ARGS=()
+USE_FAST=false
+FILTERED_ARGS=()
 
-# 检查所有参数中是否包含 -jpg
+# 检查所有参数中是否包含 -jpg 或 -fast
 for arg in "$@"; do
   if [ "$arg" = "-jpg" ]; then
     USE_JPG=true
+  elif [ "$arg" = "-fast" ]; then
+    USE_FAST=true
   else
-    JPG_ARGS+=("$arg")
+    FILTERED_ARGS+=("$arg")
   fi
 done
 
-# 重新设置参数（去除-jpg）
-set -- "${JPG_ARGS[@]}"
+# 重新设置参数（去除-jpg和-fast）
+set -- "${FILTERED_ARGS[@]}"
 
 if [ "$#" -lt 2 ]; then
   echo "[错误] 参数缺失：必须提供【视频文件或目录】和【截图保存目录】。"
-  echo "正确用法: $0 <视频文件或目录> <截图保存目录> [时间点...] [-jpg]"
+  echo "正确用法: $0 <视频文件或目录> <截图保存目录> [时间点...] [-jpg|-fast]"
   echo "  -jpg: 使用高速JPG截图模式（可选，默认PNG模式）"
+  echo "  -fast: 使用极速截图模式（可选，默认PNG模式）"
   exit 1
 fi
 
@@ -34,6 +39,8 @@ shift 2  # 移除前两个参数，剩余的都是时间点参数
 # 显示当前使用的模式
 if [ "$USE_JPG" = true ]; then
   echo "[模式] 高速JPG截图模式已启用"
+elif [ "$USE_FAST" = true ]; then
+  echo "[模式] 极速截图模式已启用"
 else
   echo "[模式] 标准PNG截图模式（默认）"
 fi
@@ -74,6 +81,10 @@ if [ "$USE_JPG" = true ]; then
   echo "[信息] 调用 screenshots_jpg.sh 进行高速JPG截图..."
   bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots_jpg.sh) "$VIDEO_PATH" "$SCREENSHOT_DIR" "$@"
   RET=$?
+elif [ "$USE_FAST" = true ]; then
+  echo "[信息] 调用 screenshots_fast.sh 进行极速截图..."
+  bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots_fast.sh) "$VIDEO_PATH" "$SCREENSHOT_DIR" "$@"
+  RET=$?
 else
   echo "[信息] 调用 screenshots.sh 进行PNG截图..."
   bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots.sh) "$VIDEO_PATH" "$SCREENSHOT_DIR" "$@"
@@ -91,6 +102,8 @@ fi
 
 if [ "$USE_JPG" = true ]; then
   echo "[信息] JPG截图模式操作完成。"
+elif [ "$USE_FAST" = true ]; then
+  echo "[信息] 极速截图模式操作完成。"
 else
   echo "[信息] PNG截图模式操作完成。"
 fi
