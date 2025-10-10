@@ -39,7 +39,7 @@ bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads
 
 ### filebrowser安装
 ```
-bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/filebrowser.sh) /data/fb-save /data/fb-media
+bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/filebrowser.sh) /data/fb-save /
 ```
 第一个参数：fb配置文件保存目录
 
