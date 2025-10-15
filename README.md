@@ -19,14 +19,24 @@ bash <(wget -qO- https://raw.githubusercontent.com/iniwex5/tools/refs/heads/main
 
 项目地址：https://github.com/iniwex5/tools
 
-### unzip mediainfo docker安装
+### unzip安装
 ```
-sudo apt update && sudo apt install -y unzip && sudo apt install -y mediainfo && bash <(curl -sL 'https://get.docker.com')
+sudo apt update && sudo apt install -y unzip
 ```
+### mediainfo 安装
+```
+sudo apt update && sudo apt install -y mediainfo 
+```
+### docker安装
+```
+bash <(curl -sL 'https://get.docker.com')
+```
+
 ### ffmpeg安装
 ```
 bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/install_ffmpeg.sh)
 ```
+
 ### publish-helper安装
 ```
 bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/publish-helper.sh) 保存目录 媒体目录
@@ -49,6 +59,7 @@ bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads
 ```
 bash <(wget -qO- https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/filebrowser.sh) /root/fb /root/qb
 ```
+
 ### openlist安装
 ```
 curl -fsSL https://res.oplist.org/script/v4.sh > install-openlist-v4.sh && sudo bash install-openlist-v4.sh
@@ -64,7 +75,7 @@ bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/m
 
 第二个参数：截图保存位置
 
-后面的参数：截图时间点。几个参数截图几张
+后面的参数(可选)：截图时间点。几个参数截图几张
 
 ### 截图上传
 ```
@@ -79,4 +90,10 @@ bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/m
 
 ```
 
+### qb自动校验脚本
+进度99% 自动定时校验
+```
+bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/auto_check.sh) 8080 guyuanwind q8pzaLLxRN^*Wx -debug
+```
+-debug参数可选 不选静默执行
 
