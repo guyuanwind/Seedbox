@@ -80,6 +80,13 @@ check_and_install_ffmpeg(){
     FIRST_RUN=1
   fi
 }
+check_and_install_file(){
+  if ! command -v file >/dev/null 2>&1; then
+    log "[依赖检测] 缺少 file，正在安装..."
+    sudo apt update -y && sudo apt install -y file || { log "[错误] 安装 file 失败"; exit 1; }
+    FIRST_RUN=1
+  fi
+}
 
 validate_arguments(){
   if [ "$#" -lt 2 ]; then
@@ -288,6 +295,7 @@ do_screenshot_reencode(){
 # ---------------- 主流程 ----------------
 check_and_install_bc
 check_and_install_ffmpeg
+check_and_install_file
 [ $FIRST_RUN -eq 1 ] && { log "[提示] 首次运行依赖安装完成。"; log ""; }
 
 validate_arguments "$@"
