@@ -1,8 +1,11 @@
 #!/bin/bash
 #
-# qBittorrent 自动限速服务 - 一键安装/更新脚本
+# qBittorrent 自动限速服务 (标签版) - 一键安装/更新脚本
 # 用法: ./install_qb_limit.sh <端口> <用户名> <密码> <分类名>
-# 逻辑: 仅基于时间。 < 1小时 = 10KiB | > 1小时 = 450MiB
+# 逻辑: 
+#   1. < 1小时: 限速 10KiB
+#   2. > 1小时: 限速 450MiB + 添加标签 "1h_over"
+#   3. 如果已有 "1h_over" 标签: 跳过，不再处理
 #
 
 # --- 颜色定义 ---
@@ -35,7 +38,7 @@ SCRIPT_NAME="qb_auto_limit_daemon.py"
 SERVICE_NAME="qb_limit.service"
 SCRIPT_PATH="${INSTALL_DIR}/${SCRIPT_NAME}"
 
-echo -e "${GREEN}==> 开始部署 qBittorrent 自动限速服务 (450MiB版)...${NC}"
+echo -e "${GREEN}==> 开始部署 qBittorrent 自动限速服务 (带标签去重版)...${NC}"
 
 # --- 3. 环境检查与依赖安装 ---
 echo "--> 检查 Python 环境..."
@@ -71,9 +74,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', date
 
 # 常量定义
 LIMIT_LOW = 10 * 1024          # 10 KiB
-LIMIT_HIGH = 450 * 1024 * 1024 # 450 MiB (已修改)
+LIMIT_HIGH = 450 * 1024 * 1024 # 450 MiB
 AGE_SEC = 3600                 # 1 Hour
 INTERVAL = 5                   # Check every 5s
+TAG_DONE = "1h_over"           # 完成标记标签
 
 def login(session, url, u, p):
     try:
@@ -99,10 +103,11 @@ def main():
         logging.error("登录失败，请检查账号密码。服务即将退出。")
         sys.exit(1)
 
-    logging.info(f"登录成功 | 监控分类: [{args.cat}] | 策略: <1h=10KiB, >1h=450MiB")
+    logging.info(f"登录成功 | 监控分类: [{args.cat}] | 标签策略: 完成后添加 [{TAG_DONE}]")
 
     while True:
         try:
+            # 获取特定分类的种子信息
             r = session.get(f'{base_url}/api/v2/torrents/info', params={'category': args.cat}, timeout=10)
             if r.status_code != 200: 
                 logging.warning("Cookie失效，尝试重连...")
@@ -117,6 +122,15 @@ def main():
             batch_high = []
 
             for t in torrents:
+                # --- 修改点 1: 检查标签是否存在 ---
+                # qBittorrent 返回的 tags 是字符串 "tag1, tag2"，需要分割处理
+                current_tags = t.get('tags', '')
+                tag_list = [x.strip() for x in current_tags.split(',')]
+                
+                if TAG_DONE in tag_list:
+                    # 如果已有标签，直接跳过，不做任何检查
+                    continue
+
                 age = now - t.get('added_on', 0)
                 limit = t.get('up_limit', -1)
                 
@@ -125,15 +139,23 @@ def main():
                     logging.info(f"新种限速 -> 10KiB: {t['name'][:30]}")
                     batch_low.append(t['hash'])
                 
-                # 阶段B: 成熟期 (> 1小时) 且 当前未放行到 450M
-                elif age >= AGE_SEC and limit != LIMIT_HIGH:
-                    logging.info(f"老种放行 -> 450MiB: {t['name'][:30]}")
+                # 阶段B: 成熟期 (> 1小时)
+                # 这里去掉了 "limit != LIMIT_HIGH" 的判断，因为只要没标签且时间到了，就应该处理（防止手动改了限速但没打标签的情况）
+                elif age >= AGE_SEC:
+                    logging.info(f"时间达标 -> 准备放行并打标签: {t['name'][:30]}")
                     batch_high.append(t['hash'])
 
+            # 执行批量操作
             if batch_low:
                 session.post(f'{base_url}/api/v2/torrents/setUploadLimit', data={'hashes': '|'.join(batch_low), 'limit': LIMIT_LOW})
+            
             if batch_high:
-                session.post(f'{base_url}/api/v2/torrents/setUploadLimit', data={'hashes': '|'.join(batch_high), 'limit': LIMIT_HIGH})
+                hashes_str = '|'.join(batch_high)
+                # 1. 设置限速
+                session.post(f'{base_url}/api/v2/torrents/setUploadLimit', data={'hashes': hashes_str, 'limit': LIMIT_HIGH})
+                # 2. --- 修改点 2: 添加标签 ---
+                session.post(f'{base_url}/api/v2/torrents/addTags', data={'hashes': hashes_str, 'tags': TAG_DONE})
+                logging.info(f"已处理 {len(batch_high)} 个种子: 速度重置并添加标签 '{TAG_DONE}'")
 
         except Exception as e:
             logging.error(f"运行循环错误: {e}")
@@ -150,7 +172,6 @@ chmod +x "${SCRIPT_PATH}"
 # --- 5. 生成 Systemd 服务文件 ---
 echo "--> 生成 Systemd 服务文件: /etc/systemd/system/${SERVICE_NAME}"
 
-# 这里使用 EOF (不带引号) 以便注入 Bash 变量
 cat <<EOF > /etc/systemd/system/${SERVICE_NAME}
 [Unit]
 Description=qBittorrent Auto Limiter Daemon
@@ -159,7 +180,6 @@ After=network.target
 [Service]
 Type=simple
 User=root
-# 启动命令直接包含参数，由安装脚本写入
 ExecStart=/usr/bin/python3 ${SCRIPT_PATH} ${QB_PORT} ${QB_USER} ${QB_PASS} "${QB_CAT}"
 Restart=always
 RestartSec=10
@@ -170,7 +190,7 @@ WantedBy=multi-user.target
 EOF
 
 # --- 6. 启动服务 ---
-echo "--> 正在注册并启动服务..."
+echo "--> 正在更新并重启服务..."
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
@@ -178,13 +198,9 @@ systemctl restart "${SERVICE_NAME}"
 # --- 7. 验证 ---
 echo -e "${GREEN}==> 部署完成！${NC}"
 echo "------------------------------------------------"
-echo "查看运行状态: systemctl status ${SERVICE_NAME}"
-echo "查看实时日志: journalctl -u ${SERVICE_NAME} -f"
-echo "停止服务:     systemctl stop ${SERVICE_NAME}"
-echo "卸载服务:     rm ${SCRIPT_PATH} && systemctl disable --now ${SERVICE_NAME} && rm /etc/systemd/system/${SERVICE_NAME}"
+echo "逻辑已更新: 完成1小时限速解除后，将添加标签 '1h_over'。"
+echo "含有 '1h_over' 标签的种子将被脚本忽略。"
 echo "------------------------------------------------"
-
-# 自动显示最后几行日志以确认运行
+echo "正在检查服务日志..."
 sleep 2
-echo "正在检查服务启动日志..."
-journalctl -u "${SERVICE_NAME}" -n 5 --no-pager
+journalctl -u "${SERVICE_NAME}" -n 10 --no-pager
