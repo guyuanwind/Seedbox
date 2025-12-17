@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # qBittorrent 自动限速服务 (标签版) - 一键安装/更新脚本
-# 用法: ./install_qb_limit.sh <端口> <用户名> <密码> <分类名>
+# 用法: ./install_sky_limit.sh <端口> <用户名> <密码> <分类名>
 # 逻辑: 
 #   1. < 1小时: 限速 10KiB
 #   2. > 1小时: 限速 450MiB + 添加标签 "1h_over"
@@ -32,15 +32,15 @@ QB_USER=$2
 QB_PASS=$3
 QB_CAT=$4
 
-# 定义安装路径
+# --- 3. 定义名称与路径 (已修改) ---
 INSTALL_DIR="/usr/local/bin"
-SCRIPT_NAME="qb_auto_limit_daemon.py"
-SERVICE_NAME="qb_limit.service"
+SCRIPT_NAME="sky_limit.py"          # <--- 程序文件名称已修改
+SERVICE_NAME="sky_limit.service"    # <--- 服务名称已修改
 SCRIPT_PATH="${INSTALL_DIR}/${SCRIPT_NAME}"
 
-echo -e "${GREEN}==> 开始部署 qBittorrent 自动限速服务 (带标签去重版)...${NC}"
+echo -e "${GREEN}==> 开始部署 qBittorrent 自动限速服务 [Sky Limit 版]...${NC}"
 
-# --- 3. 环境检查与依赖安装 ---
+# --- 4. 环境检查与依赖安装 ---
 echo "--> 检查 Python 环境..."
 if ! command -v python3 &> /dev/null; then
     echo "正在安装 Python3..."
@@ -57,7 +57,7 @@ if ! python3 -c "import requests" 2>/dev/null; then
     fi
 fi
 
-# --- 4. 生成 Python 核心脚本 ---
+# --- 5. 生成 Python 核心脚本 ---
 echo "--> 生成核心脚本: ${SCRIPT_PATH}"
 mkdir -p "${INSTALL_DIR}"
 
@@ -122,8 +122,7 @@ def main():
             batch_high = []
 
             for t in torrents:
-                # --- 修改点 1: 检查标签是否存在 ---
-                # qBittorrent 返回的 tags 是字符串 "tag1, tag2"，需要分割处理
+                # 检查标签是否存在
                 current_tags = t.get('tags', '')
                 tag_list = [x.strip() for x in current_tags.split(',')]
                 
@@ -140,7 +139,6 @@ def main():
                     batch_low.append(t['hash'])
                 
                 # 阶段B: 成熟期 (> 1小时)
-                # 这里去掉了 "limit != LIMIT_HIGH" 的判断，因为只要没标签且时间到了，就应该处理（防止手动改了限速但没打标签的情况）
                 elif age >= AGE_SEC:
                     logging.info(f"时间达标 -> 准备放行并打标签: {t['name'][:30]}")
                     batch_high.append(t['hash'])
@@ -153,7 +151,7 @@ def main():
                 hashes_str = '|'.join(batch_high)
                 # 1. 设置限速
                 session.post(f'{base_url}/api/v2/torrents/setUploadLimit', data={'hashes': hashes_str, 'limit': LIMIT_HIGH})
-                # 2. --- 修改点 2: 添加标签 ---
+                # 2. 添加标签
                 session.post(f'{base_url}/api/v2/torrents/addTags', data={'hashes': hashes_str, 'tags': TAG_DONE})
                 logging.info(f"已处理 {len(batch_high)} 个种子: 速度重置并添加标签 '{TAG_DONE}'")
 
@@ -169,12 +167,12 @@ EOF
 
 chmod +x "${SCRIPT_PATH}"
 
-# --- 5. 生成 Systemd 服务文件 ---
+# --- 6. 生成 Systemd 服务文件 ---
 echo "--> 生成 Systemd 服务文件: /etc/systemd/system/${SERVICE_NAME}"
 
 cat <<EOF > /etc/systemd/system/${SERVICE_NAME}
 [Unit]
-Description=qBittorrent Auto Limiter Daemon
+Description=Sky Limit - qBittorrent Auto Limiter
 After=network.target
 
 [Service]
@@ -189,17 +187,17 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 EOF
 
-# --- 6. 启动服务 ---
-echo "--> 正在更新并重启服务..."
+# --- 7. 启动服务 ---
+echo "--> 正在更新并重启服务 [${SERVICE_NAME}]..."
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
 
-# --- 7. 验证 ---
+# --- 8. 验证 ---
 echo -e "${GREEN}==> 部署完成！${NC}"
 echo "------------------------------------------------"
-echo "逻辑已更新: 完成1小时限速解除后，将添加标签 '1h_over'。"
-echo "含有 '1h_over' 标签的种子将被脚本忽略。"
+echo "服务名称: ${SERVICE_NAME}"
+echo "脚本路径: ${SCRIPT_PATH}"
 echo "------------------------------------------------"
 echo "正在检查服务日志..."
 sleep 2
