@@ -2,6 +2,7 @@
 #
 # qBittorrent 智能限速服务 (3ratio)
 # 功能: 分享率 >= 3.3 时自动限速并打标签
+# 频率: 5秒/次
 #
 
 # --- 颜色定义 ---
@@ -32,7 +33,7 @@ SCRIPT_NAME="3ratio.py"
 SERVICE_NAME="3ratio.service"
 SCRIPT_PATH="${INSTALL_DIR}/${SCRIPT_NAME}"
 
-echo -e "${GREEN}==> 正在部署 3ratio 服务 (Ratio=3.3)...${NC}"
+echo -e "${GREEN}==> 正在部署 3ratio 服务 (Ratio=3.3, Interval=5s)...${NC}"
 
 # --- 环境检查 ---
 if ! command -v python3 &> /dev/null; then apt-get update && apt-get install -y python3; fi
@@ -52,7 +53,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', date
 
 LIMIT_TARGET = 10 * 1024       # 10 KiB
 RATIO_THRESHOLD = 3.3          # 阈值 3.3
-INTERVAL = 10                  # 间隔 10s
+INTERVAL = 5                   # 间隔 5s (修改点)
 TAG_DONE = "3ratio"            # 完成标记
 
 def login(session, url, u, p):
@@ -88,7 +89,7 @@ def main():
         for c in cat_list:
             sources.append( (c, {'category': c}) )
 
-    logging.info(f"策略: Ratio >= {RATIO_THRESHOLD} -> 限速10K")
+    logging.info(f"策略: Ratio >= {RATIO_THRESHOLD} -> 限速10K (每5秒检查)")
 
     while True:
         for label, params in sources:
@@ -162,7 +163,7 @@ systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
 
-echo -e "${GREEN}==> 服务 [3ratio] 已启动!${NC}"
+echo -e "${GREEN}==> 服务 [3ratio] 已更新! (5秒检测版)${NC}"
 echo "------------------------------------------------"
 echo "日志监控中 (Ctrl+C 退出)..."
 sleep 1
