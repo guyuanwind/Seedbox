@@ -11,7 +11,7 @@ bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/ma
 
 项目地址：https://github.com/jerry048/Dedicated-Seedbox/blob/main/README-zh.md
 
-### 胡师傅 4.3.8qb + bbrx
+### 大新大佬 4.3.8qb + bbrx
 
 ```
 bash <(wget -qO- https://raw.githubusercontent.com/iniwex5/tools/refs/heads/main/NC_QB438.sh) username password webuiport btport
