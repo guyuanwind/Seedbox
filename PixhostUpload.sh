@@ -1,5 +1,5 @@
 #!/bin/bash
-# PixHost 批量上传脚本 (统一输出BBCode格式和图片直链)
+# PixHost 批量上传脚本 (动态域名校准版)
 # 用法: ./PixHostUpload.sh <图片目录路径>
 
 # 依赖检查
@@ -37,59 +37,45 @@ validate_file() {
     return 0
 }
 
-# URL转换器 (确保获取img1.pixhost.to原始直链)
-convert_to_direct_url() {
-    local show_url="$1"
-    # 方案1: 直接替换域名和路径
-    local direct_url=$(echo "$show_url" | sed '
-        s|https://pixhost.to/show/|https://img1.pixhost.to/images/|;
-        s|https://pixhost.to/th/|https://img1.pixhost.to/images/|;
-        s|_...\.jpg$|.jpg|;
-    ')
-    
-    # 方案2: 正则提取重建URL
-    [[ "$direct_url" =~ ^https://img1.pixhost.to/images/ ]] || {
-        [[ "$show_url" =~ ([0-9]+)/([^/]+\.(jpg|png|gif)) ]] &&
-        direct_url="https://img1.pixhost.to/images/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
-    }
-
-    # 最终验证
-    [[ "$direct_url" =~ ^https://img1.pixhost.to/images/[0-9]+/[^/]+\.(jpg|png|gif)$ ]] && {
-        echo "$direct_url"
-    } || {
-        echo "错误: URL转换失败 [$show_url]"
-        return 1
-    }
-}
-
-# 上传函数
+# 上传函数 (内部集成动态转换逻辑)
 upload_image() {
     local image="$1"
-    local response show_url direct_url
+    local response show_url th_url direct_url
 
+    # 发起上传请求
     response=$(curl -s "https://api.pixhost.to/images" \
         -H "Accept: application/json" \
         -F "img=@$image" \
         -F "content_type=0" \
         -F "max_th_size=420" 2>&1) || {
-        echo "错误: 上传请求失败 [$image]"
         return 1
     }
 
-    jq -e . >/dev/null 2>&1 <<<"$response" || {
-        echo "错误: API返回无效JSON [$image]"
-        echo "$response"
+    # 验证 JSON
+    if ! jq -e . >/dev/null 2>&1 <<<"$response"; then
         return 1
-    }
+    fi
 
+    # 1. 同时提取 show_url 和 th_url
     show_url=$(jq -r '.show_url // empty' <<<"$response")
-    [ -z "$show_url" ] && {
-        echo "错误: API未返回有效URL [$image]"
-        echo "$response"
-        return 1
-    }
+    th_url=$(jq -r '.th_url // empty' <<<"$response")
 
-    convert_to_direct_url "$show_url"
+    if [ -z "$show_url" ] || [ -z "$th_url" ]; then
+        return 1
+    fi
+
+    # 2. 动态逻辑 A: 将路径从 /thumbs/ 替换为 /images/
+    direct_url="${th_url/\/thumbs\//\/images\/}"
+
+    # 3. 动态逻辑 B: 强制域名校准 (tN -> imgN)
+    # 使用正则表达式匹配 https://t数字.pixhost.to 并替换为 https://img数字.pixhost.to
+    if [[ "$direct_url" =~ https://t([0-9]+)\.pixhost\.to ]]; then
+        local node_num="${BASH_REMATCH[1]}"
+        direct_url=$(echo "$direct_url" | sed -E "s|https://t${node_num}\.pixhost\.to|https://img${node_num}\.pixhost\.to|")
+    fi
+
+    # 输出最终确定的直链
+    echo "$direct_url"
 }
 
 # 主流程
@@ -100,7 +86,7 @@ main() {
     local direct_links=()
 
     # 统计文件
-    total=$(find "$DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \) | wc -l)
+    total=$(find "$DIR" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \) | wc -l)
     [ "$total" -eq 0 ] && {
         echo "警告: 未找到有效图片文件"
         exit 0
@@ -108,30 +94,32 @@ main() {
 
     echo "开始处理 $total 个文件..."
 
-    # 处理文件
+    # 处理文件 (使用临时文件保存结果避免子 Shell 变量丢失)
     while IFS= read -r image; do
         validate_file "$image" || continue
         
+        # 调用上传并获取校准后的直链
         if direct_url=$(upload_image "$image"); then
             ((success++))
             bbcode_links+=("[img]$direct_url[/img]")
             direct_links+=("$direct_url")
-            echo "已上传: $(basename "$image")"
+            echo "已上传并校准域名: $(basename "$image")"
+        else
+            echo "上传失败: $(basename "$image")"
         fi
-    done < <(find "$DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \) | sort)
+    done < <(find "$DIR" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" \) | sort)
 
     # 统一输出结果
     echo
     if [ "$success" -gt 0 ]; then
+        echo "========================================"
         echo "bbcode代码链接："
-        for bbcode in "${bbcode_links[@]}"; do
-            echo "$bbcode"
-        done
+        printf "%s\n" "${bbcode_links[@]}"
         
-        echo "图片直链："
-        for direct in "${direct_links[@]}"; do
-            echo "$direct"
-        done
+        echo
+        echo "图片直链 (已自动识别并校准存储节点)："
+        printf "%s\n" "${direct_links[@]}"
+        echo "========================================"
     fi
 
     # 结果报告
@@ -140,5 +128,5 @@ main() {
     [ "$success" -eq 0 ] && exit 1 || exit 0
 }
 
-# 执行 (统一输出BBCode格式和图片直链)
+# 执行
 main
